@@ -1,6 +1,5 @@
 package com.example.poststudy.presentation.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -62,7 +61,9 @@ object AppDesign {
 
 @Composable
 fun PostStudyTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    // Screens use hardcoded light backgrounds, so following the Windows dark mode
+    // turns text field input, labels and default icon tints white on white.
+    darkTheme: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme

@@ -7,7 +7,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Quiz
@@ -26,6 +25,7 @@ import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.example.poststudy.presentation.ui.components.BackButton
 import com.example.poststudy.domain.model.LessonMode
 import com.example.poststudy.presentation.theme.AppDesign
 import com.example.poststudy.presentation.ui.components.hoverEffect
@@ -39,6 +39,8 @@ fun StudentIntroScreen(
     slideTimerSeconds: Int,
     testTimerSeconds: Int,
     mode: LessonMode,
+    isExam: Boolean,
+    groupName: String,
     onStart: () -> Unit,
     onRefresh: () -> Unit,
     onBack: () -> Unit
@@ -74,18 +76,16 @@ fun StudentIntroScreen(
                 },
             topBar = {
                 CenterAlignedTopAppBar(
-                    title = { 
+                    title = {
                         Text(
-                            title.ifBlank { if (mode == LessonMode.ReAppropriation) "Sessiya Brifingi" else "Imtihon Brifingi" },
+                            title.ifBlank { if (isExam) "Imtihon brifingi" else "Mashg'ulot brifingi" },
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Black,
                             color = Color(0xFF065F46)
-                        ) 
+                        )
                     },
                     navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Orqaga", tint = Color(0xFF065F46))
-                        }
+                        BackButton(onClick = onBack)
                     },
                     actions = {
                         IconButton(onClick = onRefresh) {
@@ -133,11 +133,24 @@ fun StudentIntroScreen(
 
                         Spacer(modifier = Modifier.height(32.dp))
 
+                        if (groupName.isNotBlank()) {
+                            Text(
+                                text = "$groupName • ${if (isExam) "Imtihon" else mode.label}",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = Color(0xFF4F46E5),
+                                fontWeight = FontWeight.Black,
+                                modifier = Modifier.padding(bottom = 12.dp)
+                            )
+                        }
                         Text(
-                            text = if (mode == LessonMode.ReAppropriation) 
-                                "Mashg'ulotga tayyorlaning. Avval taqdimotni o'rganasiz, so'ngra test topshirasiz."
-                            else 
-                                "Imtihonga tayyorlaning. Bu sizning bilimingizni bevosita tekshirishdir.",
+                            text = when {
+                                isExam -> "Imtihonga tayyorlaning. Bu sizning bilimingizni bevosita tekshirishdir."
+                                mode == LessonMode.ReAppropriation ->
+                                    "Mashg'ulotga tayyorlaning. Avval taqdimotni o'rganasiz, so'ngra test topshirasiz."
+                                mode == LessonMode.PresentationOnly ->
+                                    "Taqdimotni diqqat bilan o'rganing. Bu mashg'ulotda test yo'q."
+                                else -> "Test topshirishga tayyorlaning."
+                            },
                             style = MaterialTheme.typography.bodyLarge,
                             color = Color(0xFF64748B),
                             textAlign = TextAlign.Center,
@@ -150,7 +163,7 @@ fun StudentIntroScreen(
                             modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(20.dp)
                         ) {
-                            if (mode == LessonMode.ReAppropriation) {
+                            if (mode.hasSlides) {
                                 IntroRow(
                                     icon = Icons.AutoMirrored.Filled.MenuBook,
                                     label = "O'rganish bosqichi:",
@@ -160,7 +173,7 @@ fun StudentIntroScreen(
                                 )
                             }
 
-                            IntroRow(
+                            if (mode.hasTest) IntroRow(
                                 icon = Icons.Default.Quiz,
                                 label = "Test bosqichi:",
                                 value = "$totalQuestions savol",
@@ -185,7 +198,7 @@ fun StudentIntroScreen(
                         }
                     }
                 }
-                
+
                 Spacer(modifier = Modifier.height(40.dp))
             }
         }
@@ -217,9 +230,9 @@ fun IntroRow(
             ) {
                 Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(24.dp))
             }
-            
+
             Spacer(modifier = Modifier.width(20.dp))
-            
+
             Column {
                 Text(
                     text = label,

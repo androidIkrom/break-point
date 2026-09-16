@@ -12,7 +12,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -27,6 +26,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.poststudy.presentation.ui.components.BackButton
 import com.example.poststudy.di.AppContainer
 import com.example.poststudy.domain.model.ExamRecord
 import com.example.poststudy.domain.model.Group
@@ -137,9 +137,7 @@ fun HistoryScreen(subjectId: Int, onBack: () -> Unit) {
                         }
                     },
                     navigationIcon = {
-                        IconButton(onClick = handleBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Orqaga", tint = Color(0xFF065F46))
-                        }
+                        BackButton(onClick = handleBack)
                     },
                     actions = {
                         HelpIcon(

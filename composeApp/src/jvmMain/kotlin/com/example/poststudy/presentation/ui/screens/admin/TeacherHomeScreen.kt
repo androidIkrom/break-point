@@ -1,5 +1,6 @@
 package com.example.poststudy.presentation.ui.screens.admin
 
+import com.example.poststudy.presentation.ui.components.AdaptiveGrid
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
@@ -12,7 +13,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.*
@@ -33,10 +33,25 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import androidx.compose.ui.text.style.TextOverflow
+import com.example.poststudy.presentation.ui.components.BackButton
 import com.example.poststudy.di.AppContainer
+import com.example.poststudy.domain.model.AssignmentKind
 import com.example.poststudy.domain.model.Group
+import com.example.poststudy.domain.model.GroupOverview
+import com.example.poststudy.presentation.ui.screens.groups.GroupAssignmentDialog
+import com.example.poststudy.presentation.ui.screens.groups.GroupPasswordDialog
+import com.example.poststudy.presentation.ui.components.PasswordReveal
 import com.example.poststudy.domain.model.LessonMode
 import com.example.poststudy.presentation.theme.AppDesign
+import com.example.poststudy.presentation.ui.components.NetworkServerCard
+import com.example.poststudy.presentation.ui.components.PostStudyDialog
+import com.example.poststudy.presentation.ui.components.ThreeStepVerificationDialog
+import com.example.poststudy.data.session.AppServer
+import androidx.compose.material.icons.automirrored.filled.Logout
 import com.example.poststudy.presentation.ui.components.hoverEffect
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -49,18 +64,94 @@ fun TeacherHomeScreen(
     onNavigateToHistory: () -> Unit,
     onNavigateToMonitoring: () -> Unit,
     onNavigateToGroups: () -> Unit,
-    onBack: () -> Unit
+    onLogout: () -> Unit,
+    onAccountDeleted: () -> Unit,
+    onBack: () -> Unit,
+    adminName: String? = null,
+    onEditAdminName: () -> Unit = {}
 ) {
-    var settings by remember { mutableStateOf(runBlocking { AppContainer.localRepository.getSettings(subjectId).first() }) }
-    var currentMode by remember { mutableStateOf(settings.mode) }
-    val localIp = remember { runBlocking { AppContainer.networkRepository.getLocalIpAddress().first() } }
+    val scope = rememberCoroutineScope()
+    var showLogoutDialog by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
-    // Refresh settings when screen is shown
-    LaunchedEffect(subjectId) {
-        AppContainer.localRepository.getSettings(subjectId).collect {
-            settings = it
-            currentMode = it.mode
+    if (showLogoutDialog) {
+        ThreeStepVerificationDialog(
+            title = "Admin hisobidan chiqish",
+            warning = "Chiqqaningizdan keyin admin rejimi qulflanadi va qayta kirish uchun maxfiy kalit kerak bo'ladi. Tarmoq serveri to'xtatiladi. Fanlar, darslar va sozlamalar saqlanib qoladi.",
+            confirmWord = "CHIQISH",
+            finalButtonText = "Chiqish",
+            color = AppDesign.Amber,
+            onDismiss = { showLogoutDialog = false },
+            onConfirmed = {
+                showLogoutDialog = false
+                scope.launch {
+                    withContext(Dispatchers.IO) {
+                        AppServer.stop()
+                        AppContainer.localRepository.lockAdmin()
+                    }
+                    onLogout()
+                }
+            }
+        )
+    }
+
+    if (showDeleteDialog) {
+        ThreeStepVerificationDialog(
+            title = "Hisobni butunlay o'chirish",
+            warning = "Admin hisobi va BARCHA ma'lumotlar o'chiriladi: fanlar, darslar, imtihonlar, guruhlar, tinglovchilar va natijalar. Bu amalni qaytarib bo'lmaydi!",
+            confirmWord = "O'CHIRISH",
+            finalButtonText = "Butunlay o'chirish",
+            color = Color(0xFFDC2626),
+            onDismiss = { showDeleteDialog = false },
+            onConfirmed = {
+                showDeleteDialog = false
+                scope.launch {
+                    withContext(Dispatchers.IO) {
+                        AppServer.stop()
+                        AppContainer.localRepository.deleteAccount()
+                    }
+                    onAccountDeleted()
+                }
+            }
+        )
+    }
+
+    var groups by remember { mutableStateOf<List<GroupOverview>?>(null) }
+    var groupToEdit by remember { mutableStateOf<GroupOverview?>(null) }
+    var passwordGroup by remember { mutableStateOf<GroupOverview?>(null) }
+
+    fun reloadGroups() {
+        scope.launch {
+            groups = withContext(Dispatchers.IO) { AppContainer.localRepository.getGroupOverviews(subjectId) }
         }
+    }
+
+    LaunchedEffect(subjectId) { reloadGroups() }
+
+    passwordGroup?.let { group ->
+        GroupPasswordDialog(
+            groupName = group.name,
+            currentPassword = group.password.orEmpty(),
+            onDismiss = { passwordGroup = null },
+            onSave = { password ->
+                passwordGroup = null
+                scope.launch {
+                    withContext(Dispatchers.IO) { AppContainer.localRepository.setGroupPassword(group.id, password) }
+                    reloadGroups()
+                }
+            }
+        )
+    }
+
+    groupToEdit?.let { group ->
+        GroupAssignmentDialog(
+            group = group,
+            onDismiss = { groupToEdit = null },
+            onSaved = {
+                groupToEdit = null
+                reloadGroups()
+            }
+        )
     }
 
     Box(
@@ -89,8 +180,26 @@ fun TeacherHomeScreen(
                 TopAppBar(
                     title = { Text(subjectName, color = Color(0xFF065F46), fontWeight = FontWeight.Black) },
                     navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Orqaga", tint = Color(0xFF065F46))
+                        BackButton(onClick = onBack)
+                    },
+                    actions = {
+                        // Leave room for the help icon drawn over the top-right corner
+                        Row(Modifier.padding(end = 72.dp), verticalAlignment = Alignment.CenterVertically) {
+                            OutlinedButton(
+                                onClick = { showLogoutDialog = true },
+                                shape = AppDesign.ComponentShape,
+                                border = BorderStroke(2.dp, AppDesign.Amber)
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, tint = AppDesign.Amber)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Chiqish", color = AppDesign.Amber, fontWeight = FontWeight.Bold)
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            TextButton(onClick = { showDeleteDialog = true }) {
+                                Icon(Icons.Default.DeleteForever, contentDescription = null, tint = Color(0xFFDC2626))
+                                Spacer(Modifier.width(4.dp))
+                                Text("Hisobni o'chirish", color = Color(0xFFDC2626), fontWeight = FontWeight.Bold)
+                            }
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
@@ -108,27 +217,23 @@ fun TeacherHomeScreen(
                 verticalArrangement = Arrangement.spacedBy(48.dp)
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        text = "Xush kelibsiz, admin",
-                        style = MaterialTheme.typography.displaySmall,
-                        color = Color(0xFF1E293B),
-                        fontWeight = FontWeight.Black
-                    )
-                    
-                    Surface(
-                        color = Color(0xFF6366F1).copy(alpha = 0.1f),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.padding(top = 12.dp),
-                        border = BorderStroke(1.dp, Color(0xFF6366F1).copy(alpha = 0.3f))
-                    ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "Sizning IP: $localIp",
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF6366F1)
+                            text = "Xush kelibsiz, ${adminName?.takeIf { it.isNotBlank() } ?: "admin"}",
+                            style = MaterialTheme.typography.displaySmall,
+                            color = Color(0xFF1E293B),
+                            fontWeight = FontWeight.Black
                         )
+                        Spacer(Modifier.width(12.dp))
+                        IconButton(
+                            onClick = onEditAdminName,
+                            modifier = Modifier.background(AppDesign.Emerald.copy(alpha = 0.1f), CircleShape)
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = "Ismni o'zgartirish", tint = AppDesign.Emerald)
+                        }
                     }
+
+                    NetworkServerCard(modifier = Modifier.padding(top = 20.dp).widthIn(max = 900.dp).fillMaxWidth())
 
                     Text(
                         text = "Bugun o'quv jarayonini qanday boshqaramiz?",
@@ -139,192 +244,41 @@ fun TeacherHomeScreen(
                     )
                 }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth().widthIn(max = 1200.dp).padding(top = 32.dp), // Increased top padding
-                    horizontalArrangement = Arrangement.spacedBy(32.dp)
-                ) {
-                    HomeCard(
-                        modifier = Modifier.weight(1f),
-                        title = "Darslar",
-                        subtitle = "Materiallarni boshqarish",
-                        icon = Icons.AutoMirrored.Filled.MenuBook,
-                        color = AppDesign.Amber,
-                        onClick = onNavigateToLessons
-                    )
-                    HomeCard(
-                        modifier = Modifier.weight(1f),
-                        title = "Imtihon",
-                        subtitle = "Test sinovlarini o'tkazish",
-                        icon = Icons.Default.Assignment,
-                        color = AppDesign.Indigo,
-                        onClick = onNavigateToExam
-                    )
-                    HomeCard(
-                        modifier = Modifier.weight(1f),
-                        title = "Guruhlar",
-                        subtitle = "Tinglovchilar va guruhlar",
-                        icon = Icons.Default.Groups,
-                        color = AppDesign.Violet,
-                        onClick = onNavigateToGroups
-                    )
-                    HomeCard(
-                        modifier = Modifier.weight(1f),
-                        title = "Monitoring",
-                        subtitle = "Ta'lim holati",
-                        icon = Icons.Default.Analytics,
-                        color = AppDesign.Sky,
-                        onClick = onNavigateToMonitoring
-                    )
-                    HomeCard(
-                        modifier = Modifier.weight(1f),
-                        title = "Tahlil",
-                        subtitle = "Natijalarni ko'rish",
-                        icon = Icons.AutoMirrored.Filled.List,
-                        color = AppDesign.Emerald,
-                        onClick = onNavigateToHistory
-                    )
+                AdaptiveGrid(
+                    items = listOf(
+                        HomeItem("Darslar", "Materiallarni boshqarish", Icons.AutoMirrored.Filled.MenuBook, AppDesign.Amber, onNavigateToLessons),
+                        HomeItem("Imtihon", "Test sinovlarini o'tkazish", Icons.Default.Assignment, AppDesign.Indigo, onNavigateToExam),
+                        HomeItem("Guruhlar", "Tinglovchilar va guruhlar", Icons.Default.Groups, AppDesign.Violet, onNavigateToGroups),
+                        HomeItem("Monitoring", "Natijalar statistikasi", Icons.Default.Analytics, AppDesign.Sky, onNavigateToMonitoring),
+                        HomeItem("Tahlil", "Natijalarni ko'rish", Icons.AutoMirrored.Filled.List, AppDesign.Emerald, onNavigateToHistory)
+                    ),
+                    minItemWidth = 200.dp,
+                    modifier = Modifier.fillMaxWidth().widthIn(max = 1200.dp).padding(top = 16.dp)
+                ) { item, itemModifier ->
+                    HomeCard(itemModifier, item.title, item.subtitle, item.icon, item.color, item.onClick)
                 }
 
                 Spacer(modifier = Modifier.height(32.dp))
 
-                Surface(
-                    modifier = Modifier
-                        .width(700.dp),
-                    shape = AppDesign.CardShape,
-                    color = Color.White,
-                    border = BorderStroke(3.dp, Color(0xFF10B981).copy(alpha = 0.3f)),
-                    shadowElevation = 12.dp
-                ) {
-                    Column(
-                        modifier = Modifier.padding(40.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = "Hozirgi tanlangan sessiya",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Black,
-                            color = Color(0xFF065F46)
-                        )
-                        
-                        Spacer(Modifier.height(24.dp))
-
-                        Surface(
-                            color = Color(0xFFF8FAFC),
-                            shape = AppDesign.ComponentShape,
-                            modifier = Modifier.fillMaxWidth(),
-                            border = BorderStroke(2.dp, Color(0xFFE2E8F0))
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(24.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
-                            ) {
-                                if (settings.activeSessionTitle.isNotEmpty()) {
-                                    val isExam = settings.activeSessionTitle.contains("Imtihon")
-                                    val sessionType = if (isExam) "Imtihon" else "Dars"
-                                    val sessionColor = if (isExam) Color(0xFF6366F1) else Color(0xFFF59E0B)
-
-                                    Surface(
-                                        color = sessionColor.copy(alpha = 0.1f),
-                                        shape = RoundedCornerShape(12.dp),
-                                        border = BorderStroke(1.dp, sessionColor.copy(alpha = 0.5f))
-                                    ) {
-                                        Text(
-                                            text = sessionType,
-                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.Black,
-                                            color = sessionColor
-                                        )
-                                    }
-                                    
-                                    Spacer(Modifier.height(16.dp))
-                                }
-
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
-                                ) {
-                                    Icon(
-                                        if (settings.activeSessionTitle.contains("Imtihon")) Icons.Default.Assignment else Icons.AutoMirrored.Filled.MenuBook,
-                                        contentDescription = null,
-                                        tint = if (settings.activeSessionTitle.isEmpty()) Color.Gray else Color(0xFF10B981),
-                                        modifier = Modifier.size(28.dp)
-                                    )
-                                    Spacer(Modifier.width(12.dp))
-                                    Text(
-                                        text = if (settings.activeSessionTitle.isEmpty()) "Sessiya tanlanmagan" else settings.activeSessionTitle,
-                                        style = MaterialTheme.typography.headlineSmall,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = if (settings.activeSessionTitle.isEmpty()) Color.Gray else Color(0xFF1E293B)
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(Modifier.height(32.dp))
-
-                        Text(
-                            text = "Tinglovchilar rejimi",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF64748B)
-                        )
-
-                        Spacer(Modifier.height(16.dp))
-
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(72.dp)
-                                .clip(AppDesign.ComponentShape)
-                                .background(Color(0xFFF1F5F9))
-                                .padding(6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            ModeToggleButton(
-                                modifier = Modifier.weight(1f),
-                                text = "O'rganish + test",
-                                isSelected = currentMode == LessonMode.ReAppropriation,
-                                onClick = {
-                                    currentMode = LessonMode.ReAppropriation
-                                    AppContainer.localRepository.saveSettings(
-                                        settings.presentationPath,
-                                        settings.testPath,
-                                        settings.slideTimerSeconds / 60,
-                                        settings.testTimerSeconds / 60,
-                                        LessonMode.ReAppropriation,
-                                        settings.activeSessionTitle,
-                                        settings.questionsPerStudent,
-                                        subjectId
-                                    )
-                                }
-                            )
-                            ModeToggleButton(
-                                modifier = Modifier.weight(1f),
-                                text = "Faqat test",
-                                isSelected = currentMode == LessonMode.TestOnly,
-                                onClick = {
-                                    currentMode = LessonMode.TestOnly
-                                    AppContainer.localRepository.saveSettings(
-                                        settings.presentationPath,
-                                        settings.testPath,
-                                        settings.slideTimerSeconds / 60,
-                                        settings.testTimerSeconds / 60,
-                                        LessonMode.TestOnly,
-                                        settings.activeSessionTitle,
-                                        settings.questionsPerStudent,
-                                        subjectId
-                                    )
-                                }
-                            )
-                        }
-                    }
-                }
+                GroupAssignmentsTable(
+                    groups = groups,
+                    onEdit = { groupToEdit = it },
+                    onEditPassword = { passwordGroup = it },
+                    onManageGroups = onNavigateToGroups,
+                    modifier = Modifier.fillMaxWidth().widthIn(max = 1200.dp)
+                )
             }
         }
     }
 }
+
+private class HomeItem(
+    val title: String,
+    val subtitle: String,
+    val icon: ImageVector,
+    val color: Color,
+    val onClick: () -> Unit
+)
 
 @Composable
 fun HomeCard(
@@ -337,7 +291,7 @@ fun HomeCard(
 ) {
     Surface(
         modifier = modifier
-            .height(200.dp)
+            .heightIn(min = 170.dp)
             .hoverEffect()
             .clickable { onClick() },
         shape = AppDesign.ComponentShape,
@@ -346,12 +300,12 @@ fun HomeCard(
         shadowElevation = 8.dp
     ) {
         Column(
-            modifier = Modifier.padding(32.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+            modifier = Modifier.padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Box(
                 modifier = Modifier
-                    .size(64.dp)
+                    .size(56.dp)
                     .background(color.copy(alpha = 0.15f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
@@ -361,391 +315,173 @@ fun HomeCard(
             Column {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.headlineSmall,
+                    style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Black,
-                    color = color
+                    color = color,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color(0xFF64748B),
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
     }
 }
 
+/** Which lesson or exam each group of the subject has, editable per row. */
 @Composable
-fun ModeToggleButton(
-    modifier: Modifier,
-    text: String,
-    isSelected: Boolean,
-    onClick: () -> Unit
+private fun GroupAssignmentsTable(
+    groups: List<GroupOverview>?,
+    onEdit: (GroupOverview) -> Unit,
+    onEditPassword: (GroupOverview) -> Unit,
+    onManageGroups: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    val backgroundColor by animateColorAsState(
-        if (isSelected) Color.White else Color.Transparent,
-        animationSpec = tween(300)
-    )
-    val textColor by animateColorAsState(
-        if (isSelected) Color(0xFF10B981) else Color(0xFF64748B),
-        animationSpec = tween(300)
-    )
-
-    Box(
-        modifier = modifier
-            .fillMaxHeight()
-            .hoverEffect(scale = 1.05f)
-            .clip(RoundedCornerShape(16.dp))
-            .background(backgroundColor)
-            .then(if (isSelected) Modifier.shadow(4.dp, RoundedCornerShape(16.dp)) else Modifier)
-            .clickable { onClick() },
-        contentAlignment = Alignment.Center
+    val headerColor = Color(0xFF065F46)
+    val muted = Color(0xFF64748B)
+    Surface(
+        modifier = modifier,
+        shape = AppDesign.CardShape,
+        color = Color.White,
+        border = BorderStroke(3.dp, AppDesign.Emerald.copy(alpha = 0.3f)),
+        shadowElevation = 12.dp
     ) {
+        Column(Modifier.padding(32.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "Guruhlar va mashg'ulotlar",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Black,
+                        color = headerColor
+                    )
+                    Text(
+                        "Har bir guruh tinglovchilari kirganda o'z mashg'ulotini oladi",
+                        color = muted
+                    )
+                }
+                OutlinedButton(onClick = onManageGroups, shape = AppDesign.ComponentShape) {
+                    Icon(Icons.Default.Groups, contentDescription = null, tint = AppDesign.Violet)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Guruhlarni boshqarish", color = AppDesign.Violet, fontWeight = FontWeight.Bold)
+                }
+            }
+            Spacer(Modifier.height(20.dp))
+
+            // Header row
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFFF1F5F9))
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TableHeader("Guruh", Modifier.weight(1.2f))
+                TableHeader("Mashg'ulot", Modifier.weight(2f))
+                TableHeader("Turi", Modifier.weight(0.9f))
+                TableHeader("Rejim", Modifier.weight(1.3f))
+                TableHeader("Parol", Modifier.weight(1.2f))
+                Spacer(Modifier.width(96.dp))
+            }
+
+            when {
+                groups == null -> Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = AppDesign.Emerald)
+                }
+                groups.isEmpty() -> Text(
+                    "Bu fanda guruhlar yo'q. 'Guruhlarni boshqarish' orqali guruh qo'shing.",
+                    color = muted,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(vertical = 24.dp, horizontal = 16.dp)
+                )
+                else -> groups.forEachIndexed { index, g ->
+                    if (index > 0) HorizontalDivider(color = Color(0xFFF1F5F9))
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { onEdit(g) }
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            g.name,
+                            modifier = Modifier.weight(1.2f),
+                            fontWeight = FontWeight.Black,
+                            color = Color(0xFF1E293B),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = when {
+                                g.isAssigned -> g.assignmentTitle.orEmpty()
+                                g.assignmentMissing -> "O'chirilgan mashg'ulot"
+                                else -> "Biriktirilmagan"
+                            },
+                            modifier = Modifier.weight(2f),
+                            fontWeight = if (g.isAssigned) FontWeight.Bold else FontWeight.Normal,
+                            color = when {
+                                g.isAssigned -> Color(0xFF1E293B)
+                                g.assignmentMissing -> Color(0xFFEF4444)
+                                else -> Color(0xFF94A3B8)
+                            },
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Box(Modifier.weight(0.9f)) {
+                            if (g.isAssigned) {
+                                val kindColor = if (g.kind == AssignmentKind.Exam) AppDesign.Indigo else AppDesign.Amber
+                                TableChip(g.kind!!.label, kindColor)
+                            }
+                        }
+                        Box(Modifier.weight(1.3f)) {
+                            if (g.isAssigned) {
+                                TableChip(if (g.kind == AssignmentKind.Exam) "Test" else g.mode?.label.orEmpty(), AppDesign.Emerald)
+                            }
+                        }
+                        PasswordReveal(g.password, modifier = Modifier.weight(1.2f))
+                        IconButton(
+                            onClick = { onEditPassword(g) },
+                            modifier = Modifier.size(40.dp).background(AppDesign.Violet.copy(alpha = 0.1f), CircleShape)
+                        ) {
+                            Icon(Icons.Default.Key, contentDescription = "Parolni o'zgartirish", tint = AppDesign.Violet)
+                        }
+                        Spacer(Modifier.width(16.dp))
+                        IconButton(
+                            onClick = { onEdit(g) },
+                            modifier = Modifier.size(40.dp).background(AppDesign.Emerald.copy(alpha = 0.1f), CircleShape)
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = "O'zgartirish", tint = AppDesign.Emerald)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TableHeader(text: String, modifier: Modifier) {
+    Text(text, modifier = modifier, fontWeight = FontWeight.Black, color = Color(0xFF475569), style = MaterialTheme.typography.labelLarge)
+}
+
+@Composable
+private fun TableChip(text: String, color: Color) {
+    Surface(color = color.copy(alpha = 0.12f), shape = CircleShape) {
         Text(
-            text = text,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = if (isSelected) FontWeight.Black else FontWeight.Bold,
-            color = textColor
+            text,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+            color = color,
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.labelLarge,
+            maxLines = 1
         )
     }
 }
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun MonitoringScreen(subjectId: Int, onBack: () -> Unit) {
-    var selectedGroup by remember { mutableStateOf<Group?>(null) }
-    var groups by remember { mutableStateOf<List<Pair<Group, Int>>>(emptyList()) }
-    
-    // Auto refresh or initial fetch
-    LaunchedEffect(subjectId) {
-        AppContainer.localRepository.getAllGroupsWithStats(subjectId).collect {
-            groups = it
-        }
-    }
-
-    var stats by remember { mutableStateOf<List<Pair<String, Float>>>(emptyList()) }
-
-    LaunchedEffect(selectedGroup, groups, subjectId) {
-        if (selectedGroup == null) {
-            stats = groups.map { it.first.name to it.second.toFloat() }
-        } else {
-            AppContainer.localRepository.getGroupRecords(selectedGroup!!.id, subjectId).collect { groupRecords ->
-                stats = groupRecords.map { it.studentName to (it.correctAnswers.toFloat() / it.totalQuestions * 100) }
-            }
-        }
-    }
-
-    Box(modifier = Modifier.fillMaxSize().background(AppDesign.BackgroundGradient)) {
-        Scaffold(
-            containerColor = Color.Transparent,
-            topBar = {
-                TopAppBar(
-                    title = { Text("Monitoring markazi", fontWeight = FontWeight.Black, color = Color(0xFF065F46)) },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Orqaga", tint = Color(0xFF065F46))
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-                )
-            }
-        ) { paddingValues ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .verticalScroll(rememberScrollState())
-                    .padding(40.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Surface(
-                    modifier = Modifier.widthIn(max = 1000.dp).fillMaxWidth(),
-                    shape = AppDesign.CardShape,
-                    color = Color.White,
-                    border = BorderStroke(3.dp, Color(0xFF6366F1).copy(alpha = 0.3f)),
-                    shadowElevation = 12.dp
-                ) {
-                    Column(modifier = Modifier.padding(40.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
-                                Text(
-                                    text = "Ta'lim tahlili",
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    fontWeight = FontWeight.Black,
-                                    color = Color(0xFF1E293B)
-                                )
-                                Text(
-                                    text = if (selectedGroup == null) "Barcha guruhlar holati" else "${selectedGroup?.name} natijalari",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Color(0xFF64748B),
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("Saralash: ", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = Color(0xFF64748B))
-                                Spacer(Modifier.width(8.dp))
-                                var showDropdown by remember { mutableStateOf(false) }
-                                Box {
-                                    Surface(
-                                        onClick = { showDropdown = true },
-                                        color = Color(0xFFF1F5F9),
-                                        shape = RoundedCornerShape(12.dp),
-                                        modifier = Modifier.width(240.dp)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                text = selectedGroup?.name ?: "Barcha guruhlar",
-                                                fontWeight = FontWeight.Black,
-                                                color = Color(0xFF1E293B)
-                                            )
-                                            Icon(Icons.Default.ArrowDropDown, contentDescription = null)
-                                        }
-                                    }
-
-                                    DropdownMenu(
-                                        expanded = showDropdown,
-                                        onDismissRequest = { showDropdown = false },
-                                        modifier = Modifier.width(240.dp).background(Color.White)
-                                    ) {
-                                        DropdownMenuItem(
-                                            text = { Text("Barcha guruhlar", fontWeight = FontWeight.Bold) },
-                                            onClick = { selectedGroup = null; showDropdown = false }
-                                        )
-                                        groups.forEach { (group, _) ->
-                                            DropdownMenuItem(
-                                                text = { Text(group.name) },
-                                                onClick = { selectedGroup = group; showDropdown = false }
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        Spacer(Modifier.height(48.dp))
-
-                        PerformanceGraph(data = stats)
-                        
-                        Spacer(Modifier.height(40.dp))
-                        
-                        val avg = if (stats.isNotEmpty()) stats.map { it.second }.average().toInt() else 0
-                        val statusColor = when {
-                            avg >= 80 -> Color(0xFF10B981)
-                            avg >= 60 -> Color(0xFFF59E0B)
-                            else -> Color(0xFFEF4444)
-                        }
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(24.dp)
-                        ) {
-                            MetricCard(
-                                modifier = Modifier.weight(1f),
-                                label = "O'rtacha o'zlashtirish",
-                                value = "$avg%",
-                                color = statusColor,
-                                icon = Icons.Default.Assessment
-                            )
-                            MetricCard(
-                                modifier = Modifier.weight(1f),
-                                label = "Faollik darajasi",
-                                value = if (stats.size > 10) "Yuqori" else if (stats.isNotEmpty()) "O'rtacha" else "Past",
-                                color = AppDesign.Indigo,
-                                icon = Icons.Default.Timeline
-                            )
-                            MetricCard(
-                                modifier = Modifier.weight(1f),
-                                label = "Reyting",
-                                value = when {
-                                    avg >= 85 -> "A'lo"
-                                    avg >= 60 -> "Yaxshi"
-                                    else -> "Past"
-                                },
-                                color = AppDesign.Violet,
-                                icon = Icons.Default.Stars
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-
-@Composable
-fun MetricCard(modifier: Modifier, label: String, value: String, color: Color, icon: ImageVector) {
-    Surface(
-        modifier = modifier,
-        color = Color.White,
-        shape = AppDesign.ComponentShape,
-        border = BorderStroke(4.dp, color.copy(alpha = 0.5f)),
-        shadowElevation = 6.dp
-    ) {
-        Row(
-            modifier = Modifier.padding(24.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier.size(48.dp).background(color.copy(alpha = 0.15f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(24.dp))
-            }
-            Spacer(Modifier.width(16.dp))
-            Column {
-                Text(label, style = MaterialTheme.typography.labelSmall, color = Color(0xFF64748B), fontWeight = FontWeight.Bold)
-                Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = color)
-            }
-        }
-    }
-}
-
-@Composable
-fun PerformanceGraph(data: List<Pair<String, Float>>) {
-    val animatedData = data.map { 
-        animateFloatAsState(targetValue = it.second, animationSpec = tween(1000, easing = FastOutSlowInEasing))
-    }
-
-    val textMeasurer = rememberTextMeasurer()
-    val textStyle = TextStyle(
-        fontSize = 12.sp,
-        fontWeight = FontWeight.Bold,
-        color = Color(0xFF64748B)
-    )
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(450.dp) // Increased height to accommodate vertical labels
-            .background(Color(0xFFF8FAFC), AppDesign.ComponentShape)
-            .padding(top = 24.dp, end = 24.dp, start = 8.dp, bottom = 8.dp)
-    ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val paddingLeft = 60.dp.toPx()
-            val paddingBottom = 120.dp.toPx()
-            val width = size.width - paddingLeft
-            val height = size.height - paddingBottom
-            val spacing = if (data.size > 1) width / (data.size - 1) else width
-            
-            // Draw Y-axis labels and grid lines
-            val gridColor = Color(0xFFE2E8F0)
-            for (i in 0..5) {
-                val percentage = i * 20
-                val y = height - (i * height / 5)
-                
-                // Grid line
-                drawLine(
-                    color = gridColor,
-                    start = Offset(paddingLeft, y),
-                    end = Offset(size.width, y),
-                    strokeWidth = 1f
-                )
-                
-                // Y-axis label
-                drawText(
-                    textMeasurer = textMeasurer,
-                    text = "$percentage%",
-                    style = textStyle,
-                    topLeft = Offset(paddingLeft - 45.dp.toPx(), y - 10.dp.toPx())
-                )
-            }
-
-            if (data.isNotEmpty()) {
-                val path = Path()
-                val points = animatedData.mapIndexed { index, anim ->
-                    val x = paddingLeft + (index * spacing)
-                    val y = height - (anim.value / 100f * height)
-                    Offset(x, y)
-                }
-
-                // Draw X-axis labels (Vertical)
-                data.forEachIndexed { index, pair ->
-                    val x = paddingLeft + (index * spacing)
-                    val label = if (pair.first.length > 15) pair.first.take(12) + "..." else pair.first
-                    rotate(degrees = 90f, pivot = Offset(x, height + 10.dp.toPx())) {
-                        drawText(
-                            textMeasurer = textMeasurer,
-                            text = label,
-                            style = textStyle,
-                            topLeft = Offset(x, height + 10.dp.toPx())
-                        )
-                    }
-                }
-
-                // Smooth path
-                path.moveTo(points[0].x, points[0].y)
-                if (points.size > 1) {
-                    for (i in 0 until points.size - 1) {
-                        val p1 = points[i]
-                        val p2 = points[i + 1]
-                        val controlPoint1 = Offset(p1.x + (p2.x - p1.x) / 2f, p1.y)
-                        val controlPoint2 = Offset(p1.x + (p2.x - p1.x) / 2f, p2.y)
-                        path.cubicTo(controlPoint1.x, controlPoint1.y, controlPoint2.x, controlPoint2.y, p2.x, p2.y)
-                    }
-                    
-                    drawPath(
-                        path = path,
-                        color = Color(0xFF6366F1),
-                        style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
-                    )
-                    
-                    // Draw fill area
-                    val fillPath = Path().apply {
-                        addPath(path)
-                        lineTo(points.last().x, height)
-                        lineTo(points.first().x, height)
-                        close()
-                    }
-                    drawPath(
-                        path = fillPath,
-                        color = Color(0xFF6366F1).copy(alpha = 0.1f)
-                    )
-                }
-
-                // Draw points and percentage labels
-                points.forEachIndexed { index, point ->
-                    drawCircle(
-                        color = Color.White,
-                        radius = 6.dp.toPx(),
-                        center = point
-                    )
-                    drawCircle(
-                        color = Color(0xFF6366F1),
-                        radius = 4.dp.toPx(),
-                        center = point,
-                        style = Stroke(width = 2.dp.toPx())
-                    )
-                    
-                    // Show percentage above point if it's the target value or just always
-                    drawText(
-                        textMeasurer = textMeasurer,
-                        text = "${data[index].second.toInt()}%",
-                        style = textStyle.copy(color = Color(0xFF6366F1)),
-                        topLeft = Offset(point.x - 15.dp.toPx(), point.y - 25.dp.toPx())
-                    )
-                }
-            }
-        }
-        
-        if (data.isEmpty()) {
-            Text(
-                text = "Ma'lumotlar mavjud emas",
-                modifier = Modifier.align(Alignment.Center),
-                color = Color(0xFF64748B),
-                fontWeight = FontWeight.Bold
-            )
-        }
-    }
-}
-

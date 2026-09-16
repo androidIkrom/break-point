@@ -9,7 +9,7 @@ plugins {
 
 kotlin {
     jvm()
-    
+
     sourceSets {
         commonMain.dependencies {
             implementation(libs.compose.runtime)
@@ -50,12 +50,19 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb, TargetFormat.Exe)
             packageName = "BreakPoint"
-            packageVersion = "1.0.0"
+            // Raise for every release sent to users: an MSI with the same version does not replace the installed one
+            packageVersion = "1.1.1"
             vendor = "BreakPoint Vendor"
             copyright = "© 2024 BreakPoint"
             description = "BreakPoint"
 
-            modules("java.sql", "java.naming", "java.desktop", "jdk.unsupported", "jdk.httpserver", "java.management", "java.xml", "java.logging")
+            // Checked with `./gradlew suggestRuntimeModules`; java.prefs is needed by the connect screen,
+            // jdk.charsets by legacy .doc files in Cyrillic code pages
+            modules(
+                "java.sql", "java.naming", "java.desktop", "java.management", "java.xml", "java.logging",
+                "java.prefs", "java.instrument", "java.security.jgss", "java.xml.crypto",
+                "jdk.unsupported", "jdk.httpserver", "jdk.security.auth", "jdk.charsets", "jdk.localedata"
+            )
 
             windows {
                 shortcut = true

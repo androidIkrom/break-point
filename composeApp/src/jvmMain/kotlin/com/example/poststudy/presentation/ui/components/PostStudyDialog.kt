@@ -23,6 +23,7 @@ fun PostStudyDialog(
     dismissText: String = "Bekor qilish",
     confirmColor: Color = Color(0xFF10B981), // Default Emerald
     onConfirm: () -> Unit,
+    showDismissButton: Boolean = true,
     content: @Composable (() -> Unit)? = null
 ) {
     Dialog(onDismissRequest = onDismissRequest) {
@@ -46,7 +47,7 @@ fun PostStudyDialog(
                 },
             shape = AppDesign.CardShape,
             color = Color.White,
-            tonalElevation = 12.dp,
+            shadowElevation = 12.dp,
             border = androidx.compose.foundation.BorderStroke(2.dp, Color(0xFF10B981).copy(alpha = 0.2f))
         ) {
             Column(
@@ -59,9 +60,9 @@ fun PostStudyDialog(
                     fontWeight = FontWeight.Black,
                     color = Color(0xFF065F46)
                 )
-                
+
                 Spacer(modifier = Modifier.height(16.dp))
-                
+
                 Text(
                     text = text,
                     style = MaterialTheme.typography.bodyLarge,
@@ -80,7 +81,7 @@ fun PostStudyDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    OutlinedButton(
+                    if (showDismissButton) OutlinedButton(
                         onClick = onDismissRequest,
                         modifier = Modifier.weight(1f).height(60.dp),
                         shape = AppDesign.ComponentShape,
@@ -88,7 +89,7 @@ fun PostStudyDialog(
                     ) {
                         Text(dismissText, color = Color(0xFF64748B), fontWeight = FontWeight.Bold)
                     }
-                    
+
                     Button(
                         onClick = onConfirm,
                         modifier = Modifier.weight(1f).height(60.dp),

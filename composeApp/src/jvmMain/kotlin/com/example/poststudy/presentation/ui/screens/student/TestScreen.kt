@@ -8,7 +8,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.poststudy.presentation.ui.components.BackButton
 import com.example.poststudy.domain.model.Question
 import com.example.poststudy.presentation.theme.AppDesign
 import com.example.poststudy.presentation.ui.components.HelpIcon
@@ -58,6 +58,14 @@ fun TestScreen(
             timeLeftSeconds--
         }
         onFinished(selectedAnswers.toList(), testTimerSeconds - timeLeftSeconds)
+    }
+
+    // Keyboard shortcuts must not pick an option the question does not have
+    val selectAnswer: (Int) -> Unit = { option ->
+        val question = questions.getOrNull(currentQuestionIndex)
+        if (question != null && option < question.options.size) {
+            selectedAnswers[currentQuestionIndex] = option
+        }
     }
 
     val handleNextSubmit: () -> Unit = {
@@ -110,16 +118,16 @@ fun TestScreen(
                                 true
                             }
                             Key.One -> {
-                                selectedAnswers[currentQuestionIndex] = 0; true
+                                selectAnswer(0); true
                             }
                             Key.Two -> {
-                                selectedAnswers[currentQuestionIndex] = 1; true
+                                selectAnswer(1); true
                             }
                             Key.Three -> {
-                                selectedAnswers[currentQuestionIndex] = 2; true
+                                selectAnswer(2); true
                             }
                             Key.Four -> {
-                                selectedAnswers[currentQuestionIndex] = 3; true
+                                selectAnswer(3); true
                             }
                             else -> false
                         }
@@ -134,9 +142,7 @@ fun TestScreen(
                         }
                     },
                     navigationIcon = {
-                        IconButton(onClick = { showBackDialog = true }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Orqaga", tint = Color(0xFF1E293B))
-                        }
+                        BackButton(onClick = { showBackDialog = true })
                     },
                     actions = {
                         HelpIcon(

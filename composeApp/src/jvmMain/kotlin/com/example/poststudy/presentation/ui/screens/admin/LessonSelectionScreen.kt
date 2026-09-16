@@ -1,5 +1,6 @@
 package com.example.poststudy.presentation.ui.screens.admin
 
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -8,7 +9,6 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.*
@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import java.io.File
+import com.example.poststudy.presentation.ui.components.BackButton
 import com.example.poststudy.di.AppContainer
 import com.example.poststudy.domain.model.Lesson
 import com.example.poststudy.domain.model.LessonMode
@@ -45,9 +46,9 @@ fun LessonSelectionScreen(
 
     LaunchedEffect(subjectId) {
         isLoading = true
-        AppContainer.localRepository.getAllLessons(subjectId).collect {
+        AppContainer.localRepository.getAllLessons(subjectId).collect { all ->
             lessons.clear()
-            lessons.addAll(it)
+            lessons.addAll(if (isTeacher) all else all.filter { it.mode.hasSlides })
             isLoading = false
         }
     }
@@ -80,9 +81,7 @@ fun LessonSelectionScreen(
                 TopAppBar(
                     title = { Text(if (isTeacher) "Darslar ro'yxati" else "Dars tanlash", color = Color(0xFF065F46), fontWeight = FontWeight.Black) },
                     navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Orqaga", tint = Color(0xFF065F46))
-                        }
+                        BackButton(onClick = onBack)
                     },
                     actions = {
                         Row(modifier = Modifier.padding(top = 16.dp, end = 46.dp)){
@@ -148,6 +147,7 @@ fun LessonSelectionScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun LessonCard(
     lesson: Lesson,
@@ -157,21 +157,21 @@ fun LessonCard(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val presentationExists = if (lesson.mode == LessonMode.ReAppropriation) File(lesson.presentationPath).exists() else true
-    val testExists = File(lesson.testPath).exists()
+    val presentationExists = !lesson.mode.hasSlides || File(lesson.presentationPath).exists()
+    val testExists = !lesson.mode.hasTest || File(lesson.testPath).exists()
     val hasError = !presentationExists || !testExists
 
     Surface(
         onClick = onSelect,
-        modifier = Modifier.fillMaxWidth().height(200.dp).hoverEffect(),
+        modifier = Modifier.fillMaxWidth().heightIn(min = 190.dp).hoverEffect(scale = 1.03f, yOffset = -6f),
         shape = AppDesign.CardShape,
         color = if (hasError) Color(0xFFFFF1F2) else Color.White,
         border = BorderStroke(4.dp, if (hasError) Color.Red.copy(alpha = 0.5f) else themeColor.copy(alpha = 0.5f)),
         shadowElevation = 12.dp
     ) {
         Column(
-            modifier = Modifier.padding(32.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+            modifier = Modifier.padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -183,7 +183,9 @@ fun LessonCard(
                         text = lesson.title,
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Black,
-                        color = if (hasError) Color(0xFF991B1B) else themeColor
+                        color = if (hasError) Color(0xFF991B1B) else themeColor,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                     if (hasError) {
                         Text(
@@ -194,14 +196,14 @@ fun LessonCard(
                         )
                     } else {
                         Text(
-                            text = if (lesson.mode == LessonMode.ReAppropriation) "O'RGANISH VA TEST" else "FAQAT TEST",
+                            text = lesson.mode.label.uppercase(),
                             style = MaterialTheme.typography.labelLarge,
                             color = themeColor.copy(alpha = 0.8f),
                             fontWeight = FontWeight.Black
                         )
                     }
                 }
-                
+
                 if (isTeacher) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         IconButton(
@@ -220,17 +222,17 @@ fun LessonCard(
                 }
             }
 
-            Row(
+            FlowRow(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                InfoBadge(
+                if (lesson.mode.hasTest) InfoBadge(
                     icon = Icons.Default.Timer,
                     text = "${lesson.testTimerSeconds / 60} daq test",
                     color = themeColor
                 )
-                if (lesson.mode == LessonMode.ReAppropriation) {
+                if (lesson.mode.hasSlides) {
                     InfoBadge(
                         icon = Icons.AutoMirrored.Filled.MenuBook,
                         text = "${lesson.slideTimerSeconds / 60} daq dars",

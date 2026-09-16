@@ -9,7 +9,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -22,8 +21,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.poststudy.presentation.ui.components.BackButton
 import com.example.poststudy.domain.model.Question
 import com.example.poststudy.presentation.theme.AppDesign
+
+/** Delivery state of a network-mode result to the admin computer. */
+sealed interface SubmitStatus {
+    data object Sending : SubmitStatus
+    data object Sent : SubmitStatus
+    data class Failed(val message: String) : SubmitStatus
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -32,6 +39,8 @@ fun ResultScreen(
     userAnswers: List<Int?>,
     studentName: String,
     timeSpentSeconds: Int,
+    submitStatus: SubmitStatus? = null,
+    onRetrySubmit: () -> Unit = {},
     onFinish: () -> Unit
 ) {
     val correctCount = questions.zip(userAnswers).count { (question, answer) ->
@@ -87,13 +96,7 @@ fun ResultScreen(
                     }
                 },
                     navigationIcon = {
-                        IconButton(onClick = onFinish) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Orqaga",
-                                tint = Color(0xFF1E293B)
-                            )
-                        }
+                        BackButton(onClick = onFinish)
                     },
                     colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
                 )
@@ -183,6 +186,12 @@ fun ResultScreen(
                                 )
                             }
                         }
+                    }
+                }
+
+                if (submitStatus != null) {
+                    item {
+                        SubmitStatusBanner(submitStatus, onRetrySubmit)
                     }
                 }
 
@@ -300,6 +309,47 @@ fun ResultScreen(
                             )
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SubmitStatusBanner(status: SubmitStatus, onRetry: () -> Unit) {
+    val (color, text) = when (status) {
+        SubmitStatus.Sending -> Color(0xFF6366F1) to "Natija adminga yuborilmoqda..."
+        SubmitStatus.Sent -> Color(0xFF10B981) to "Natija adminga yuborildi."
+        is SubmitStatus.Failed -> Color(0xFFEF4444) to "Natija adminga yuborilmadi: ${status.message}"
+    }
+    Surface(
+        modifier = Modifier.fillMaxWidth().widthIn(max = 700.dp),
+        color = color.copy(alpha = 0.08f),
+        shape = AppDesign.ComponentShape,
+        border = BorderStroke(2.dp, color.copy(alpha = 0.4f))
+    ) {
+        Row(
+            modifier = Modifier.padding(20.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (status == SubmitStatus.Sending) {
+                CircularProgressIndicator(color = color, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.width(12.dp))
+            }
+            Text(
+                text,
+                modifier = Modifier.weight(1f),
+                color = color,
+                fontWeight = FontWeight.Bold
+            )
+            if (status is SubmitStatus.Failed) {
+                Spacer(Modifier.width(12.dp))
+                Button(
+                    onClick = onRetry,
+                    shape = AppDesign.ComponentShape,
+                    colors = ButtonDefaults.buttonColors(containerColor = color)
+                ) {
+                    Text("Qayta yuborish", fontWeight = FontWeight.Bold)
                 }
             }
         }
