@@ -5,22 +5,28 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import com.example.poststudy.presentation.ui.components.BackButton
 import com.example.poststudy.di.AppContainer
 import com.example.poststudy.presentation.theme.AppDesign
+import com.example.poststudy.presentation.ui.components.SecretKeyDialog
+import com.example.poststudy.presentation.ui.components.ScrollableCentered
+import com.example.poststudy.domain.model.AdminUsername
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -29,35 +35,77 @@ fun LoginScreen(
     onBack: () -> Unit
 ) {
     var isRegistered by remember { mutableStateOf(false) }
-    
+
+    var loaded by remember { mutableStateOf(false) }
+    // Keyboard shortcuts only reach the screen when something in it has focus
+    val firstField = remember { FocusRequester() }
+
     LaunchedEffect(Unit) {
-        AppContainer.localRepository.isUserRegistered().collect { isRegistered = it }
+        AppContainer.localRepository.isUserRegistered().collect {
+            isRegistered = it
+            loaded = true
+        }
+    }
+    LaunchedEffect(loaded, isRegistered) {
+        if (!loaded) return@LaunchedEffect
+        // Scaffold places its content a frame later, so retry until the field is attached
+        repeat(20) {
+            withFrameNanos { }
+            if (runCatching { firstField.requestFocus() }.isSuccess) return@LaunchedEffect
+        }
     }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
+    var fullName by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf("") }
 
-    val handleAction = {
-        if (username.isBlank() || password.isBlank()) {
-            errorMessage = "Maydonlarni to'ldirish shart"
+    val scope = rememberCoroutineScope()
+    var isChecking by remember { mutableStateOf(false) }
+    var showResetDialog by remember { mutableStateOf(false) }
+
+    if (showResetDialog) {
+        SecretKeyDialog(
+            title = "Admin parolini tiklash",
+            text = "Joriy admin hisobi o'chiriladi va yangisini yaratasiz. Fanlar va darslar saqlanib qoladi. Davom etish uchun maxfiy kalitni kiriting.",
+            confirmText = "Tiklash",
+            onDismiss = { showResetDialog = false },
+            onAccepted = {
+                scope.launch {
+                    withContext(Dispatchers.IO) { AppContainer.localRepository.clearAllUsers() }
+                    showResetDialog = false
+                    isRegistered = false
+                    username = ""
+                    password = ""
+                    confirmPassword = ""
+                    errorMessage = "Parol tiklash rejimi: yangi hisob yarating"
+                }
+            }
+        )
+    }
+
+    val handleAction: () -> Unit = {
+        if (isChecking) {
+            // Ignore repeated Enter presses while the check runs
+        } else if (username.isBlank() || password.isBlank()) {
+            errorMessage = "Login va parolni kiriting"
+        } else if (!isRegistered && AdminUsername.validate(fullName) != null) {
+            errorMessage = AdminUsername.validate(fullName)!!
         } else if (!isRegistered && password != confirmPassword) {
             errorMessage = "Parollar mos kelmadi"
         } else {
-            if (!isRegistered) {
-                AppContainer.localRepository.registerUser(username, password)
-                onLoginSuccess()
-            } else {
-                val scope = CoroutineScope(Dispatchers.IO)
-                scope.launch {
-                    AppContainer.localRepository.validateUser(username, password).collect { isValid ->
-                        if (isValid) {
-                            onLoginSuccess()
-                        } else {
-                            errorMessage = "Login yoki parol noto'g'ri"
-                        }
+            isChecking = true
+            scope.launch {
+                val success = withContext(Dispatchers.IO) {
+                    if (!isRegistered) {
+                        AppContainer.localRepository.registerUser(username.trim(), password, fullName.trim())
+                        true
+                    } else {
+                        AppContainer.localRepository.validateUser(username, password).first()
                     }
                 }
+                isChecking = false
+                if (success) onLoginSuccess() else errorMessage = "Login yoki parol noto'g'ri"
             }
         }
     }
@@ -83,12 +131,8 @@ fun LoginScreen(
                         handleAction()
                         true
                     } else if (it.isCtrlPressed && it.isAltPressed && it.key == Key.One && it.type == KeyEventType.KeyDown) {
-                        AppContainer.localRepository.clearAllUsers()
-                        isRegistered = false
-                        username = ""
-                        password = ""
-                        confirmPassword = ""
-                        errorMessage = "Parol tiklash rejimi: Yangi hisob yarating"
+                        // Resetting the admin account needs the secret key
+                        showResetDialog = true
                         true
                     } else false
                 },
@@ -96,23 +140,16 @@ fun LoginScreen(
                 TopAppBar(
                     title = {},
                     navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Orqaga", tint = Color(0xFF065F46))
-                        }
+                        BackButton(onClick = onBack)
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
                 )
             },
             containerColor = Color.Transparent
         ) { paddingValues ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
-                contentAlignment = Alignment.Center
-            ) {
+            ScrollableCentered(Modifier.fillMaxSize().padding(paddingValues)) {
                 Card(
-                    modifier = Modifier.width(520.dp).padding(16.dp),
+                    modifier = Modifier.widthIn(max = 520.dp).fillMaxWidth().padding(16.dp),
                     shape = AppDesign.CardShape,
                     elevation = CardDefaults.cardElevation(defaultElevation = 24.dp),
                     colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -128,7 +165,7 @@ fun LoginScreen(
                             fontWeight = FontWeight.Black,
                             color = Color(0xFF065F46)
                         )
-                        
+
                         Text(
                             text = if (isRegistered) "Davom etish uchun tizimga kiring" else "Admin profilini sozlang",
                             style = MaterialTheme.typography.bodyLarge,
@@ -157,9 +194,9 @@ fun LoginScreen(
 
                         OutlinedTextField(
                             value = username,
-                            onValueChange = { username = it; errorMessage = "" },
-                            label = { Text("Foydalanuvchi nomi") },
-                            modifier = Modifier.fillMaxWidth(),
+                            onValueChange = { username = it.trim(); errorMessage = "" },
+                            label = { Text("Login") },
+                            modifier = Modifier.fillMaxWidth().focusRequester(firstField),
                             shape = AppDesign.ComponentShape,
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
@@ -167,6 +204,25 @@ fun LoginScreen(
                                 focusedLabelColor = Color(0xFF6366F1)
                             )
                         )
+
+                        if (!isRegistered) {
+                            Spacer(modifier = Modifier.height(20.dp))
+                            OutlinedTextField(
+                                value = fullName,
+                                onValueChange = { fullName = AdminUsername.filterTyping(it); errorMessage = "" },
+                                label = { Text("Username") },
+                                supportingText = {
+                                    Text("Tinglovchilar adminlar ro'yxatida shu nomni ko'radi: bitta so'z, ${AdminUsername.MAX_LENGTH} ta belgigacha")
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = AppDesign.ComponentShape,
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedBorderColor = Color(0xFF6366F1),
+                                    focusedLabelColor = Color(0xFF6366F1)
+                                )
+                            )
+                        }
 
                         Spacer(modifier = Modifier.height(20.dp))
 

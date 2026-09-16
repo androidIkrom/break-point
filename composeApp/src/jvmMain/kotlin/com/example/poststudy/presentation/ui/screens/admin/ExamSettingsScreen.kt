@@ -7,7 +7,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,7 +15,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.example.poststudy.presentation.ui.components.BackButton
 import com.example.poststudy.di.AppContainer
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.example.poststudy.data.util.TestParser
 import com.example.poststudy.domain.model.Exam
 import com.example.poststudy.presentation.theme.AppDesign
@@ -72,7 +75,10 @@ fun ExamSettingsScreen(
         }
     }
 
-    val saveExam = {
+    val scope = rememberCoroutineScope()
+    var isSaving by remember { mutableStateOf(false) }
+
+    val saveExam: () -> Unit = {
         val tCount = testCountPerStudent.toIntOrNull() ?: 0
         val tMin = testTimerMin.toIntOrNull() ?: 0
 
@@ -84,7 +90,8 @@ fun ExamSettingsScreen(
             errorMessage = "Savollar soni noto'g'ri (1 - $totalQuestionsInFile)"
         } else if (tMin <= 0) {
             errorMessage = "Vaqtni to'g'ri kiriting"
-        } else {
+        } else if (!isSaving) {
+            isSaving = true
             val exam = Exam(
                 id = examToEdit?.id ?: 0,
                 title = title,
@@ -94,18 +101,18 @@ fun ExamSettingsScreen(
                 subjectId = subjectId
             )
 
-            if (examToEdit == null) {
-                AppContainer.localRepository.addExam(exam)
-            } else {
-                AppContainer.localRepository.updateExam(exam)
+            scope.launch {
+                // Saving copies the Word file into the app folder
+                withContext(Dispatchers.IO) {
+                    if (examToEdit == null) {
+                        AppContainer.localRepository.addExam(exam)
+                    } else {
+                        AppContainer.localRepository.updateExam(exam)
+                    }
+                }
+                isSaving = false
+                onSaveComplete()
             }
-
-            // Also set as active session automatically? 
-            // The user said "easier for teachers to set exams faster".
-            // Let's just save it to the list for now, selection screen will handle starting.
-            // Wait, usually when you "save" a new exam you might want to start it.
-            // But let's follow the "Selection" pattern like Lessons.
-            onSaveComplete()
         }
     }
 
@@ -120,9 +127,7 @@ fun ExamSettingsScreen(
                 TopAppBar(
                     title = { Text("Imtihon Sozlamalari", color = Color(0xFF065F46), fontWeight = FontWeight.Black) },
                     navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Orqaga", tint = Color(0xFF065F46))
-                        }
+                        BackButton(onClick = onBack)
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
                 )
@@ -137,7 +142,7 @@ fun ExamSettingsScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Card(
-                    modifier = Modifier.width(700.dp),
+                    modifier = Modifier.widthIn(max = 700.dp).fillMaxWidth(),
                     shape = AppDesign.CardShape,
                     elevation = CardDefaults.cardElevation(defaultElevation = 16.dp),
                     colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -157,7 +162,7 @@ fun ExamSettingsScreen(
 
                         Text("Imtihon nomi", style = MaterialTheme.typography.titleLarge, color = Color(0xFF6366F1), fontWeight = FontWeight.Black)
                         Spacer(Modifier.height(16.dp))
-                        
+
                         OutlinedTextField(
                             value = title,
                             onValueChange = { title = it },

@@ -1,8 +1,22 @@
 package com.example.poststudy.domain.model
 
-enum class LessonMode {
-    ReAppropriation,
-    TestOnly
+/**
+ * For a [Lesson] this is which materials it has; for a group assignment it is what students do.
+ */
+enum class LessonMode(val label: String) {
+    /** Presentation first, then the test. */
+    ReAppropriation("Prezentatsiya + test"),
+    TestOnly("Faqat test"),
+    PresentationOnly("Faqat prezentatsiya");
+
+    val hasSlides: Boolean get() = this != TestOnly
+    val hasTest: Boolean get() = this != PresentationOnly
+
+    companion object {
+        /** Unknown names (e.g. "Seminar" from other builds) mean slides + test. */
+        fun fromDbValue(value: String): LessonMode =
+            entries.firstOrNull { it.name.equals(value, ignoreCase = true) } ?: ReAppropriation
+    }
 }
 
 data class Lesson(

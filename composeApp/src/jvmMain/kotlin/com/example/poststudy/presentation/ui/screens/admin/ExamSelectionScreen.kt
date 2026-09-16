@@ -1,5 +1,6 @@
 package com.example.poststudy.presentation.ui.screens.admin
 
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -8,7 +9,6 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import java.io.File
+import com.example.poststudy.presentation.ui.components.BackButton
 import com.example.poststudy.di.AppContainer
 import com.example.poststudy.domain.model.Exam
 import com.example.poststudy.presentation.theme.AppDesign
@@ -74,9 +75,7 @@ fun ExamSelectionScreen(
                 TopAppBar(
                     title = { Text("Imtihonlar ro'yxati", color = Color(0xFF065F46), fontWeight = FontWeight.Black) },
                     navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Orqaga", tint = Color(0xFF065F46))
-                        }
+                        BackButton(onClick = onBack)
                     },
                     actions = {
                         IconButton(onClick = onAddNewExam, modifier = Modifier.padding(top = 16.dp)) {
@@ -133,6 +132,7 @@ fun ExamSelectionScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ExamCard(
     exam: Exam,
@@ -142,18 +142,18 @@ fun ExamCard(
     onDelete: () -> Unit
 ) {
     val fileExists = File(exam.testPath).exists()
-    
+
     Surface(
         onClick = onSelect,
-        modifier = Modifier.fillMaxWidth().height(200.dp).hoverEffect(),
+        modifier = Modifier.fillMaxWidth().heightIn(min = 190.dp).hoverEffect(scale = 1.03f, yOffset = -6f),
         shape = AppDesign.CardShape,
         color = if (fileExists) Color.White else Color(0xFFFFF1F2),
         border = BorderStroke(4.dp, if (fileExists) themeColor.copy(alpha = 0.5f) else Color.Red.copy(alpha = 0.5f)),
         shadowElevation = 12.dp
     ) {
         Column(
-            modifier = Modifier.padding(32.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+            modifier = Modifier.padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -165,7 +165,9 @@ fun ExamCard(
                         text = exam.title,
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Black,
-                        color = if (fileExists) themeColor else Color(0xFF991B1B)
+                        color = if (fileExists) themeColor else Color(0xFF991B1B),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                     if (!fileExists) {
                         Text(
@@ -183,7 +185,7 @@ fun ExamCard(
                         )
                     }
                 }
-                
+
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     IconButton(
                         onClick = onEdit,
@@ -200,10 +202,10 @@ fun ExamCard(
                 }
             }
 
-            Row(
+            FlowRow(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalAlignment = Alignment.CenterVertically
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 InfoBadge(
                     icon = Icons.Default.Timer,

@@ -23,6 +23,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.poststudy.presentation.theme.AppDesign
 import com.example.poststudy.presentation.ui.components.hoverEffect
+import com.example.poststudy.presentation.ui.components.InstituteLogo
 import kotlinx.coroutines.delay
 
 @Composable
@@ -63,6 +64,7 @@ fun InfoScreen(onContinue: () -> Unit) {
                 enter = fadeIn() + expandVertically()
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    InstituteLogo(size = 170.dp, modifier = Modifier.padding(bottom = 16.dp))
                     Text(
                         text = "Loyiha haqida",
                         style = MaterialTheme.typography.displaySmall,

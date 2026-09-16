@@ -5,6 +5,7 @@ sealed class Screen {
     data object Splash : Screen()
     data object RoleSelection : Screen()
     data object Login : Screen()
+    data object AdminLocked : Screen()
     data object Readme : Screen()
     data object TeacherIntro : Screen()
     data object StudentHome : Screen()
@@ -27,7 +28,8 @@ sealed class Screen {
     data class GroupDetails(val group: Group) : Screen()
     data object NetworkConnect : Screen()
     data object GroupSelection : Screen()
-    data class StudentSelection(val group: Group) : Screen()
+    data class StudentSelection(val group: GroupOverview) : Screen()
+    data object PresentationFinished : Screen()
     data object SubjectSelection : Screen()
 }
 

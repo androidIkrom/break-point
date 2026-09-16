@@ -21,6 +21,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.poststudy.presentation.theme.AppDesign
 import com.example.poststudy.presentation.ui.components.hoverEffect
+import com.example.poststudy.presentation.ui.components.AdaptiveGrid
+import com.example.poststudy.presentation.ui.components.ScrollableCentered
+import com.example.poststudy.presentation.ui.components.InstituteLogo
 import kotlinx.coroutines.delay
 
 @Composable
@@ -48,31 +51,17 @@ fun SplashScreen(onContinue: () -> Unit) {
             },
         contentAlignment = Alignment.Center
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth(0.8f).padding(32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
+        ScrollableCentered(Modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 24.dp)) {
+            Column(
+                modifier = Modifier.widthIn(max = 1100.dp).fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
             AnimatedVisibility(
                 visible = visible,
                 enter = fadeIn() + expandVertically()
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Surface(
-                        color = Color(0xFF10B981),
-                        shape = CircleShape,
-                        modifier = Modifier.size(120.dp),
-                        shadowElevation = 12.dp
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                Icons.Default.School,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(64.dp)
-                            )
-                        }
-                    }
+                    InstituteLogo(size = 200.dp)
                     
                     Spacer(modifier = Modifier.height(24.dp))
                     
@@ -98,32 +87,25 @@ fun SplashScreen(onContinue: () -> Unit) {
                 visible = visible,
                 enter = fadeIn() + slideInVertically { it / 2 }
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(24.dp)
-                ) {
+                AdaptiveGrid(
+                    items = listOf(
+                        Triple(Icons.Default.Person, "Admin - pedagoglar uchun", "Dars materiallarini yuklang, testlar yarating va tinglovchilar natijalarini real vaqtda kuzating."),
+                        Triple(Icons.Default.Face, "Tinglovchilar uchun", "Taqdimotlarni ko'rib chiqing, bilimlaringizni sinab ko'ring va natijalaringizni darhol bilib oling."),
+                        Triple(Icons.Default.CloudSync, "Tarmoq", "Lokal tarmoq orqali pedagoglar va tinglovchilar o'rtasida ma'lumotlarni oson almashing.")
+                    ),
+                    minItemWidth = 240.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) { (icon, title, description), itemModifier ->
                     InstructionCard(
-                        modifier = Modifier.weight(1f).hoverEffect(),
-                        icon = Icons.Default.Person,
-                        title = "Admin - pedagoglar uchun",
-                        description = "Dars materiallarini yuklang, testlar yarating va tinglovchilar natijalarini real vaqtda kuzating."
-                    )
-                    InstructionCard(
-                        modifier = Modifier.weight(1f).hoverEffect(),
-                        icon = Icons.Default.Face,
-                        title = "Tinglovchilar uchun",
-                        description = "Taqdimotlarni ko'rib chiqing, bilimlaringizni sinab ko'ring va natijalaringizni darhol bilib oling."
-                    )
-                    InstructionCard(
-                        modifier = Modifier.weight(1f).hoverEffect(),
-                        icon = Icons.Default.CloudSync,
-                        title = "Tarmoq",
-                        description = "Lokal tarmoq orqali pedagoglar va tinglovchilar o'rtasida ma'lumotlarni oson almashing."
+                        modifier = itemModifier.hoverEffect(),
+                        icon = icon,
+                        title = title,
+                        description = description
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(40.dp))
 
             AnimatedVisibility(
                 visible = visible,
@@ -143,6 +125,7 @@ fun SplashScreen(onContinue: () -> Unit) {
                 }
             }
         }
+    }
     }
 }
 

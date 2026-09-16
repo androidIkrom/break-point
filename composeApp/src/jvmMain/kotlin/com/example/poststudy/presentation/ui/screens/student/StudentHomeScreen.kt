@@ -1,5 +1,6 @@
 package com.example.poststudy.presentation.ui.screens.student
 
+import com.example.poststudy.presentation.ui.components.ScrollableCentered
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -7,7 +8,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.poststudy.presentation.ui.components.BackButton
 import com.example.poststudy.presentation.theme.AppDesign
 import com.example.poststudy.presentation.ui.components.hoverEffect
 
@@ -58,25 +59,17 @@ fun StudentHomeScreen(
                         )
                     },
                     navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Orqaga",
-                                tint = Color(0xFF065F46)
-                            )
-                        }
+                        BackButton(onClick = onBack)
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
                 )
             }
         ) { paddingValues ->
-            Column(
+            ScrollableCentered(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
-                    .padding(32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                    .padding(horizontal = 32.dp)
             ) {
                 Text(
                     text = "Xush kelibsiz, tinglovchi",
@@ -130,7 +123,7 @@ fun StudentHomeCard(
     Surface(
         onClick = onClick,
         modifier = modifier
-            .height(220.dp)
+            .heightIn(min = 200.dp)
             .hoverEffect(),
         shape = AppDesign.ComponentShape,
         color = Color.White,

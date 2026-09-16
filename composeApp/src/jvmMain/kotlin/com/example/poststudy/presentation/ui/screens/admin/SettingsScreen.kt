@@ -7,7 +7,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,9 +15,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import com.example.poststudy.presentation.ui.components.BackButton
 import com.example.poststudy.di.AppContainer
 import com.example.poststudy.data.util.TestParser
 import com.example.poststudy.domain.model.*
@@ -39,15 +43,15 @@ fun SettingsScreen(
     onBack: () -> Unit
 ) {
     val initialSettings = remember { runBlocking { AppContainer.localRepository.getSettings(subjectId).first() } }
-    
+
     var title by remember { mutableStateOf(lessonToEdit?.title ?: "") }
     var presentationPath by remember { mutableStateOf(lessonToEdit?.presentationPath ?: initialSettings.presentationPath) }
     var testPath by remember { mutableStateOf(lessonToEdit?.testPath ?: initialSettings.testPath) }
     var testWarnings by remember { mutableStateOf<List<String>>(emptyList()) }
-    
+
     var slideTimerMin by remember { mutableStateOf(( (lessonToEdit?.slideTimerSeconds ?: initialSettings.slideTimerSeconds) / 60 ).toString()) }
     var testTimerMin by remember { mutableStateOf(( (lessonToEdit?.testTimerSeconds ?: initialSettings.testTimerSeconds) / 60 ).toString()) }
-    
+
     var selectedMode by remember { mutableStateOf(lessonToEdit?.mode ?: initialSettings.mode) }
     var showSaveDialog by remember { mutableStateOf(false) }
 
@@ -62,8 +66,8 @@ fun SettingsScreen(
         type = PickerType.File(extensions = listOf("doc", "docx")),
         mode = PickerMode.Single
     ) { file: PlatformFile? ->
-        file?.path?.let { 
-            testPath = it 
+        file?.path?.let {
+            testPath = it
             val result = TestParser.parseTest(it)
             testWarnings = result.warnings
         }
@@ -72,32 +76,43 @@ fun SettingsScreen(
     val slideTimerVal = slideTimerMin.toIntOrNull() ?: 0
     val testTimerVal = testTimerMin.toIntOrNull() ?: 0
 
-    val isReady = title.isNotEmpty() &&
-                  (if (selectedMode == LessonMode.ReAppropriation) presentationPath.isNotEmpty() else true) && 
-                  testPath.isNotEmpty() && 
-                  (if (selectedMode == LessonMode.ReAppropriation) slideTimerVal >= 5 else true) && 
-                  testTimerVal >= 5
+    val isReady = title.isNotBlank() &&
+                  (!selectedMode.hasSlides || (presentationPath.isNotEmpty() && slideTimerVal >= 5)) &&
+                  (!selectedMode.hasTest || (testPath.isNotEmpty() && testTimerVal >= 5))
 
-    val saveSettings = {
+    val scope = rememberCoroutineScope()
+    var isSaving by remember { mutableStateOf(false) }
+
+    val saveSettings: () -> Unit = save@{
+        if (isSaving) return@save
+        isSaving = true
         val lesson = Lesson(
             id = lessonToEdit?.id ?: 0,
-            title = title,
-            presentationPath = presentationPath,
-            testPath = testPath,
-            slideTimerSeconds = if (selectedMode == LessonMode.ReAppropriation) slideTimerVal * 60 else 0,
-            testTimerSeconds = testTimerVal * 60,
+            title = title.trim(),
+            // Drop materials the chosen type does not use, so the lesson list does not warn about them
+            presentationPath = if (selectedMode.hasSlides) presentationPath else "",
+            testPath = if (selectedMode.hasTest) testPath else "",
+            slideTimerSeconds = if (selectedMode.hasSlides) slideTimerVal * 60 else 0,
+            testTimerSeconds = if (selectedMode.hasTest) testTimerVal * 60 else 0,
             mode = selectedMode,
             subjectId = subjectId
         )
-        
-        if (lessonToEdit == null) {
-            AppContainer.localRepository.addLesson(lesson)
-        } else {
-            AppContainer.localRepository.updateLesson(lesson)
+
+        val lastPaths = presentationPath to testPath
+        scope.launch {
+            // Saving copies the files into the app folder, which can take a moment for big decks
+            withContext(Dispatchers.IO) {
+                if (lessonToEdit == null) {
+                    AppContainer.localRepository.addLesson(lesson)
+                } else {
+                    AppContainer.localRepository.updateLesson(lesson)
+                }
+                // Remembered only to prefill the next new lesson
+                AppContainer.localRepository.saveSettings(lastPaths.first, lastPaths.second, slideTimerVal, testTimerVal, selectedMode, title, 0, subjectId)
+            }
+            isSaving = false
+            onSaveComplete()
         }
-        
-        AppContainer.localRepository.saveSettings(presentationPath, testPath, slideTimerVal, testTimerVal, selectedMode, title, 0, subjectId)
-        onSaveComplete()
     }
 
     Box(
@@ -117,9 +132,7 @@ fun SettingsScreen(
                 CenterAlignedTopAppBar(
                     title = { Text(if (lessonToEdit == null) "Yangi dars" else "Darsni tahrirlash", fontWeight = FontWeight.Black, color = Color(0xFF1E293B)) },
                     navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Orqaga", tint = Color(0xFF1E293B))
-                        }
+                        BackButton(onClick = onBack)
                     },
                     actions = {
                         HelpIcon(
@@ -166,29 +179,36 @@ fun SettingsScreen(
                             )
                         }
 
-                        SettingsSection(title = "Sessiya rejimi") {
+                        SettingsSection(title = "Dars turi") {
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(24.dp)
+                                modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp)
                             ) {
                                 ModeCard(
-                                    modifier = Modifier.weight(1f),
-                                    title = "O'rganish",
-                                    description = "Dars + Test",
+                                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                                    title = "Prezentatsiya + test",
+                                    description = "Guruhga biriktirishda rejim tanlanadi",
                                     isSelected = selectedMode == LessonMode.ReAppropriation,
                                     onClick = { selectedMode = LessonMode.ReAppropriation }
                                 )
                                 ModeCard(
-                                    modifier = Modifier.weight(1f),
-                                    title = "Faqat Test",
-                                    description = "Faqat baholash",
+                                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                                    title = "Faqat prezentatsiya",
+                                    description = "Test fayli kerak emas",
+                                    isSelected = selectedMode == LessonMode.PresentationOnly,
+                                    onClick = { selectedMode = LessonMode.PresentationOnly }
+                                )
+                                ModeCard(
+                                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                                    title = "Faqat test",
+                                    description = "Prezentatsiya kerak emas",
                                     isSelected = selectedMode == LessonMode.TestOnly,
                                     onClick = { selectedMode = LessonMode.TestOnly }
                                 )
                             }
                         }
 
-                        if (selectedMode == LessonMode.ReAppropriation) {
+                        if (selectedMode.hasSlides) {
                             SettingsSection(title = "Prezentatsiya fayli") {
                                 FilePickerRow(
                                     path = presentationPath,
@@ -198,7 +218,7 @@ fun SettingsScreen(
                             }
                         }
 
-                        SettingsSection(title = "Test fayli") {
+                        if (selectedMode.hasTest) SettingsSection(title = "Test fayli") {
                             FilePickerRow(
                                 path = testPath,
                                 label = "Word hujjati (.doc, .docx)",
@@ -228,7 +248,7 @@ fun SettingsScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(24.dp)
                             ) {
-                                if (selectedMode == LessonMode.ReAppropriation) {
+                                if (selectedMode.hasSlides) {
                                     OutlinedTextField(
                                         value = slideTimerMin,
                                         onValueChange = { if (it.all { c -> c.isDigit() }) slideTimerMin = it },
@@ -245,7 +265,7 @@ fun SettingsScreen(
                                     )
                                 }
 
-                                OutlinedTextField(
+                                if (selectedMode.hasTest) OutlinedTextField(
                                     value = testTimerMin,
                                     onValueChange = { if (it.all { c -> c.isDigit() }) testTimerMin = it },
                                     label = { Text("Test (daq)") },
@@ -266,7 +286,7 @@ fun SettingsScreen(
 
                 Button(
                     onClick = { saveSettings() },
-                    enabled = isReady,
+                    enabled = isReady && !isSaving,
                     modifier = Modifier.width(400.dp).height(72.dp).padding(bottom = 32.dp),
                     shape = AppDesign.ComponentShape,
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6366F1), contentColor = Color.White),
@@ -286,7 +306,7 @@ fun SettingsScreen(
             confirmText = "Ha, Saqlash",
             dismissText = "Bekor qilish",
             confirmColor = Color(0xFF6366F1), // Indigo to match settings theme
-            onConfirm = { 
+            onConfirm = {
                 showSaveDialog = false
                 saveSettings()
             }
@@ -304,19 +324,19 @@ fun ModeCard(
 ) {
     Surface(
         onClick = onClick,
-        modifier = modifier.height(120.dp),
+        modifier = modifier.heightIn(min = 120.dp),
         shape = AppDesign.ComponentShape,
         color = if (isSelected) Color(0xFFEEF2FF) else Color(0xFFF8FAFC),
         border = if (isSelected) BorderStroke(4.dp, Color(0xFF6366F1)) else BorderStroke(2.dp, Color(0xFFE2E8F0)),
         shadowElevation = if (isSelected) 8.dp else 0.dp
     ) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Text(text = title, fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleLarge, color = if (isSelected) Color(0xFF6366F1) else Color(0xFF1E293B))
-            Text(text = description, style = MaterialTheme.typography.bodyMedium, color = if (isSelected) Color(0xFF6366F1) else Color(0xFF64748B), fontWeight = FontWeight.Bold)
+            Text(text = title, fontWeight = FontWeight.Black, style = MaterialTheme.typography.titleMedium, color = if (isSelected) Color(0xFF6366F1) else Color(0xFF1E293B), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Text(text = description, style = MaterialTheme.typography.bodySmall, color = if (isSelected) Color(0xFF6366F1) else Color(0xFF64748B), fontWeight = FontWeight.Bold, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         }
     }
 }
@@ -341,16 +361,31 @@ fun FilePickerRow(path: String, label: String, onSelect: () -> Unit) {
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        val file = remember(path) { if (path.isBlank()) null else java.io.File(path) }
+        val missing = file != null && !file.exists()
         OutlinedTextField(
-            value = path.split("\\", "/").last(),
+            value = file?.name.orEmpty(),
             onValueChange = {},
             label = { Text(label) },
+            placeholder = { Text("Fayl tanlanmagan", color = Color(0xFF94A3B8)) },
+            supportingText = when {
+                file == null -> null
+                missing -> { { Text("Fayl topilmadi: ${file.path}", color = Color(0xFFB91C1C)) } }
+                else -> { { Text(file.parent.orEmpty(), color = Color(0xFF64748B), maxLines = 1, overflow = TextOverflow.Ellipsis) } }
+            },
+            isError = missing,
             modifier = Modifier.weight(1f),
             readOnly = true,
+            singleLine = true,
             shape = AppDesign.ComponentShape,
+            textStyle = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
             colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = Color(0xFF0F172A),
+                unfocusedTextColor = Color(0xFF0F172A),
                 focusedBorderColor = Color(0xFF6366F1),
-                unfocusedBorderColor = Color(0xFFE2E8F0)
+                unfocusedBorderColor = Color(0xFFCBD5E1),
+                focusedLabelColor = Color(0xFF6366F1),
+                unfocusedLabelColor = Color(0xFF64748B)
             )
         )
         Spacer(modifier = Modifier.width(16.dp))

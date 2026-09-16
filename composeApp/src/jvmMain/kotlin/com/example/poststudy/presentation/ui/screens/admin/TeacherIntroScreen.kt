@@ -7,7 +7,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -16,12 +15,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.poststudy.presentation.ui.components.BackButton
 import com.example.poststudy.presentation.theme.AppDesign
 import com.example.poststudy.presentation.ui.components.hoverEffect
 
@@ -34,13 +33,6 @@ fun TeacherIntroScreen(onNext: () -> Unit, onBack: () -> Unit) {
         focusRequester.requestFocus()
     }
 
-    val backgroundGradient = Brush.verticalGradient(
-        colors = listOf(
-            Color(0xFF0F172A),
-            Color(0xFF1E293B),
-            Color(0xFF334155)
-        )
-    )
 
     Box(
         modifier = Modifier
@@ -71,15 +63,13 @@ fun TeacherIntroScreen(onNext: () -> Unit, onBack: () -> Unit) {
                             "Admin uchun qo'llanma",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.ExtraBold,
-                            color = Color.White
+                            color = Color(0xFF065F46)
                         ) 
                     },
                     navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Orqaga", tint = Color.White)
-                        }
+                        BackButton(onClick = onBack)
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
                 )
             }
         ) { paddingValues ->
@@ -107,7 +97,7 @@ fun TeacherIntroScreen(onNext: () -> Unit, onBack: () -> Unit) {
 
                 TeacherInfoCard(
                     modifier = Modifier.hoverEffect(scale = 1.02f, yOffset = -5f),
-                    title = "3. Word test tormati (muhum!)",
+                    title = "3. Word test formati (muhim!)",
                     content = "Test fayli quyidagi formatda bo'lishi shart:\n\n1. Savol matni\na) Birinchi variant\nb) Ikkinchi variant*\nc) Uchinchi variant\nd) To'rtinchi variant\n\nTo'g'ri javobning oxiriga yulduzcha (*) belgisini qo'ying. Har bir savoldan keyin bitta bo'sh qator tashlang."
                 )
 
