@@ -31,13 +31,21 @@ import com.example.poststudy.presentation.App
 import com.example.poststudy.presentation.theme.PostStudyTheme
 import com.example.poststudy.presentation.theme.Signal
 import com.example.poststudy.presentation.ui.components.SignalIconButton
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.WindowPosition
 import java.awt.Dimension
+import java.awt.GraphicsEnvironment
+import java.awt.Rectangle
+import java.awt.Toolkit
 
 fun main() = application {
     AppLog.install()
     AppContainer.localRepository.init()
     DemoData.seedIfFresh()
-    val windowState = rememberWindowState(placement = WindowPlacement.Maximized)
+    // Never WindowPlacement.Maximized: for an undecorated window Compose maximizes over the
+    // taskbar. The window is sized to the usable screen area instead (see fillScreen below).
+    val windowState = rememberWindowState(placement = WindowPlacement.Floating, position = WindowPosition(Alignment.Center), size = DpSize(1280.dp, 820.dp))
     val serverRunning by AppContainer.networkRepository.serverRunning.collectAsState()
     var windowVisible by remember { mutableStateOf(true) }
 
@@ -76,8 +84,39 @@ fun main() = application {
         undecorated = true, // This makes the window match our UI perfectly
         icon = painterResource(Res.drawable.icon)
     ) {
+        /** Fills the screen of the window's monitor, leaving the taskbar visible. */
+        fun fillScreen() {
+            val usable = usableScreenBounds(window)
+            windowState.placement = WindowPlacement.Floating
+            windowState.position = WindowPosition(usable.x.dp, usable.y.dp)
+            windowState.size = DpSize(usable.width.dp, usable.height.dp)
+        }
+        fun isFilled(): Boolean {
+            val usable = usableScreenBounds(window)
+            return windowState.size.width >= (usable.width - 2).dp && windowState.size.height >= (usable.height - 2).dp
+        }
+
         // Layouts are designed down to this size; smaller windows would clip the admin table
-        LaunchedEffect(Unit) { window.minimumSize = Dimension(1024, 700) }
+        LaunchedEffect(Unit) {
+            window.minimumSize = Dimension(1024, 700)
+            // Compose writes the window's initial bounds back into the state when the window is
+            // shown, so the fill must come after that or it is overwritten
+            while (!window.isShowing) kotlinx.coroutines.delay(16)
+            kotlinx.coroutines.delay(120)
+            fillScreen()
+        }
+        // Win+Up, Aero Snap or a double-click on the title bar maximize an undecorated window over
+        // the taskbar; turn that into a fill of the usable area instead
+        DisposableEffect(Unit) {
+            val listener = java.awt.event.WindowStateListener { event ->
+                if (event.newState and java.awt.Frame.MAXIMIZED_BOTH != 0) {
+                    window.extendedState = java.awt.Frame.NORMAL
+                    fillScreen()
+                }
+            }
+            window.addWindowStateListener(listener)
+            onDispose { window.removeWindowStateListener(listener) }
+        }
 
         PostStudyTheme {
             Column(Modifier.fillMaxSize()) {
@@ -118,13 +157,15 @@ fun main() = application {
                                     onDark = true
                                 )
                                 SignalIconButton(
-                                    icon = if (windowState.placement == WindowPlacement.Maximized) Icons.Default.FilterNone else Icons.Default.CropSquare,
+                                    icon = if (isFilled()) Icons.Default.FilterNone else Icons.Default.CropSquare,
                                     contentDescription = "Kattalashtirish",
                                     onClick = {
-                                        windowState.placement = if (windowState.placement == WindowPlacement.Maximized) {
-                                            WindowPlacement.Floating
+                                        if (isFilled()) {
+                                            windowState.size = DpSize(1280.dp, 820.dp)
+                                            windowState.position = WindowPosition(Alignment.Center)
                                         } else {
-                                            WindowPlacement.Maximized
+                                            // Recomputed each time: the window may have moved to another screen
+                                            fillScreen()
                                         }
                                     },
                                     tint = Signal.OnDarkMuted,
@@ -156,4 +197,18 @@ fun main() = application {
             }
         }
     }
+}
+
+/** The window's screen minus the taskbar (and any other docked bar), in the same units AWT uses for the window. */
+private fun usableScreenBounds(window: java.awt.Window): Rectangle {
+    val gc = window.graphicsConfiguration ?: return GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds
+    val bounds = gc.bounds
+    val insets = Toolkit.getDefaultToolkit().getScreenInsets(gc)
+    val usable = Rectangle(
+        bounds.x + insets.left,
+        bounds.y + insets.top,
+        bounds.width - insets.left - insets.right,
+        bounds.height - insets.top - insets.bottom
+    )
+    return usable
 }
