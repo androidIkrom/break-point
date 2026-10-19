@@ -35,7 +35,9 @@ data class SessionData(
     val subjectId: Int,
     val encodedSlides: List<String> = emptyList(),
     // Nullable: Gson leaves absent fields null despite Kotlin defaults
-    val kind: AssignmentKind? = AssignmentKind.Lesson
+    val kind: AssignmentKind? = AssignmentKind.Lesson,
+    /** Identifies this served session when the answers come back. */
+    val token: String? = null
 )
 
 /** Answer of /session: either the group's session or a message to show the student. */
@@ -55,6 +57,8 @@ internal fun versionMismatchMessage(otherProtocol: Int, otherVersion: String?): 
     }
 }
 private const val WRONG_PASSWORD_MESSAGE = "Guruh paroli noto'g'ri."
+/** Largest request body accepted; answers and a name never need more. */
+private const val MAX_BODY_BYTES = 256 * 1024
 /** Slows down password guessing from the LAN. */
 private const val WRONG_PASSWORD_DELAY_MS = 700L
 
@@ -186,7 +190,7 @@ object NetworkManager {
     fun startServer(
         port: Int? = null,
         getSession: (groupId: Int) -> Result<SessionData>,
-        onRecordReceived: (ExamRecord) -> Unit,
+        onSubmission: (Submission) -> Result<GradedResult>,
         adminName: () -> String = { "" }
     ): Boolean {
         if (server != null) return true
@@ -194,7 +198,7 @@ object NetworkManager {
         val ports = if (port != null) listOf(port) else PORT_RANGE.toList()
         for (candidate in ports) {
             try {
-                server = createServer(candidate, getSession, onRecordReceived)
+                server = createServer(candidate, getSession, onSubmission)
                 LanDiscovery.startResponder(candidate, adminName)
                 serverError = null
                 _running.value = true
@@ -219,7 +223,7 @@ object NetworkManager {
     private fun createServer(
         port: Int,
         getSession: (groupId: Int) -> Result<SessionData>,
-        onRecordReceived: (ExamRecord) -> Unit
+        onSubmission: (Submission) -> Result<GradedResult>
     ): HttpServer =
         // Bind to 0.0.0.0 to listen on all available network interfaces (LAN, WiFi, etc.)
         HttpServer.create(InetSocketAddress("0.0.0.0", port), 0).apply {
@@ -279,7 +283,7 @@ object NetworkManager {
 
             createContext("/create-student") { exchange ->
                 handle(exchange, "POST") {
-                    val body = exchange.requestBody.bufferedReader(StandardCharsets.UTF_8).readText()
+                    val body = exchange.readBody() ?: return@handle
                     val request = gson.fromJson(body, Student::class.java)
                     val name = request?.name?.trim().orEmpty()
                     if (exchange.authorizedGroupId().let { it == null || it != request?.groupId }) {
@@ -299,15 +303,18 @@ object NetworkManager {
 
             createContext("/submit") { exchange ->
                 handle(exchange, "POST") {
-                    val body = exchange.requestBody.bufferedReader(StandardCharsets.UTF_8).readText()
-                    val record = gson.fromJson(body, ExamRecord::class.java)
-                    if (exchange.authorizedGroupId().let { it == null || it != record?.groupId }) {
+                    val body = exchange.readBody() ?: return@handle
+                    val submission = runCatching { gson.fromJson(body, Submission::class.java) }.getOrNull()
+                    if (exchange.authorizedGroupId().let { it == null || it != submission?.groupId }) {
                         exchange.sendText(403, WRONG_PASSWORD_MESSAGE)
-                    } else if (record == null || record.totalQuestions <= 0) {
-                        exchange.sendText(400, "invalid record")
+                    } else if (submission == null || submission.token.isNullOrBlank() || submission.submissionId.isNullOrBlank() || submission.answers == null) {
+                        exchange.sendText(400, "Javoblar noto'g'ri formatda.")
                     } else {
-                        onRecordReceived(record)
-                        exchange.sendText(200, "OK")
+                        // Graded on this computer; the student's app only sent answers
+                        onSubmission(submission).fold(
+                            onSuccess = { exchange.sendJson(200, gson.toJson(it)) },
+                            onFailure = { exchange.sendText(409, it.message ?: "Natijani qabul qilib bo'lmadi.") }
+                        )
                     }
                 }
             }
@@ -342,6 +349,16 @@ object NetworkManager {
         } finally {
             exchange.close()
         }
+    }
+
+    /** The request body, or null after answering 413 when it is larger than [MAX_BODY_BYTES]. */
+    private fun HttpExchange.readBody(): String? {
+        val bytes = requestBody.readNBytes(MAX_BODY_BYTES + 1)
+        if (bytes.size > MAX_BODY_BYTES) {
+            sendText(413, "So'rov juda katta.")
+            return null
+        }
+        return String(bytes, StandardCharsets.UTF_8)
     }
 
     private fun HttpExchange.sendJson(code: Int, json: String) =
@@ -457,8 +474,10 @@ object NetworkManager {
             text.trim().toIntOrNull() ?: throw JsonParseException("Bad id: $text")
         }
 
-    fun submitResult(address: ServerAddress, record: ExamRecord, password: String): Result<Unit> =
-        request(address, "/submit", query = groupQuery(record.groupId ?: -1, password), body = gson.toJson(record)) { }
+    fun submitAnswers(address: ServerAddress, submission: Submission, password: String): Result<GradedResult> =
+        request(address, "/submit", query = groupQuery(submission.groupId, password), body = gson.toJson(submission)) { text ->
+            gson.fromJson(text, GradedResult::class.java) ?: throw JsonParseException("Empty result")
+        }
 
     private fun <T> request(
         address: ServerAddress,
@@ -488,6 +507,11 @@ object NetworkManager {
             val code = connection.responseCode
             if (code == 403) {
                 return Result.failure(Exception(WRONG_PASSWORD_MESSAGE))
+            }
+            if (body != null && code in 400..499) {
+                // Our own server explains a refused submit in the body
+                val text = runCatching { connection.errorStream?.bufferedReader(StandardCharsets.UTF_8)?.use { it.readText() } }.getOrNull()
+                return Result.failure(Exception(text?.takeIf { it.isNotBlank() } ?: "So'rov rad etildi (kod $code)."))
             }
             if (code != 200) {
                 return Result.failure(

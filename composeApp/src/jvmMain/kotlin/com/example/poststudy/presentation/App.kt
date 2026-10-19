@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.example.poststudy.di.AppContainer
 import com.example.poststudy.data.network.ServerAddress
+import com.example.poststudy.data.session.Grading
 import com.example.poststudy.data.session.MaterialCache
 import com.example.poststudy.data.session.Outbox
 import com.example.poststudy.data.session.PreparedSession
@@ -129,11 +130,13 @@ fun App() {
     // Rail navigation asks first while a form holds unsaved input
     val unsavedGuard = remember { UnsavedGuard() }
     var blockedNavigation by remember { mutableStateOf<(() -> Unit)?>(null) }
-    var pendingRecord by remember { mutableStateOf<ExamRecord?>(null) }
+    var pendingSubmission by remember { mutableStateOf<Submission?>(null) }
     var submitStatus by remember { mutableStateOf<SubmitStatus?>(null) }
+    // Score of the last test: computed here in local mode, by the admin computer in network mode
+    var graded by remember { mutableStateOf<GradedResult?>(null) }
 
-    fun submitPendingRecord() {
-        val record = pendingRecord ?: return
+    fun submitPendingSubmission() {
+        val submission = pendingSubmission ?: return
         val address = serverAddress
         val password = groupPassword
         if (address == null) {
@@ -142,28 +145,29 @@ fun App() {
         }
         submitStatus = SubmitStatus.Sending
         appScope.launch {
-            var result = Result.failure<Unit>(IllegalStateException())
+            var result = Result.failure<GradedResult>(IllegalStateException())
             for (attempt in 1..3) {
                 result = withContext(Dispatchers.IO) {
-                    AppContainer.networkRepository.submitResult(address, record, password)
+                    AppContainer.networkRepository.submitAnswers(address, submission, password)
                 }
                 if (result.isSuccess) break
                 if (attempt < 3) delay(2000)
             }
             // Ignore the outcome if a newer test has started meanwhile
-            if (pendingRecord !== record) return@launch
+            if (pendingSubmission !== submission) return@launch
             submitStatus = result.fold(
                 onSuccess = {
-                    pendingRecord = null
-                    withContext(Dispatchers.IO) { Outbox.remove(record.submissionId) }
+                    graded = it
+                    pendingSubmission = null
+                    withContext(Dispatchers.IO) { Outbox.remove(submission.submissionId) }
                     SubmitStatus.Sent
                 },
                 onFailure = {
                     // Kept on disk: sent again on the next start or the next retry
-                    withContext(Dispatchers.IO) { Outbox.add(Outbox.Entry(address.host, address.port, password, record)) }
+                    withContext(Dispatchers.IO) { Outbox.add(Outbox.Entry(address.host, address.port, password, submission)) }
                     SubmitStatus.Failed(
-                        (it.message ?: "Natijani yuborib bo'lmadi.") +
-                            " Natija shu kompyuterda saqlandi va admin tarmog'i topilganda avtomatik yuboriladi."
+                        (it.message ?: "Javoblarni yuborib bo'lmadi.") +
+                            " Javoblar shu kompyuterda saqlandi va admin tarmog'i topilganda avtomatik yuboriladi."
                     )
                 }
             )
@@ -590,38 +594,38 @@ fun App() {
                                 userAnswers = answers
                                 timeSpent = spent
 
-                                val pairs = questions.zip(answers)
-                                val correctCount = pairs.count { (q, a) -> q.correctIndex == a }
-                                val wrongDetails = pairs
-                                    .filter { (q, a) -> q.correctIndex != a }
-                                    .joinToString("\n\n") { (q, a) ->
-                                        val correct = q.options.getOrNull(q.correctIndex) ?: "-"
-                                        val chosen = a?.let { q.options.getOrNull(it) } ?: "O'tkazib yuborildi"
-                                        "S: ${q.text}\nTo'g'ri javob: $correct\nTanlangan javob: $chosen"
-                                    }
-
-                                val record = ExamRecord(
-                                    studentName = studentName.ifBlank { "Anonim" },
-                                    lessonTitle = current?.title.orEmpty(),
-                                    totalQuestions = questions.size,
-                                    correctAnswers = correctCount,
-                                    wrongAnswers = questions.size - correctCount,
-                                    wrongDetails = wrongDetails,
-                                    timeSpentSeconds = spent,
-                                    timestamp = System.currentTimeMillis(),
-                                    groupId = currentGroup?.id,
-                                    studentId = currentStudentId,
-                                    subjectId = currentGroup?.subjectId ?: current?.subjectId,
-                                    submissionId = java.util.UUID.randomUUID().toString()
-                                )
-
                                 if (isNetworkMode) {
-                                    // IDs belong to the admin database, so the admin stores the record
-                                    pendingRecord = record
-                                    submitPendingRecord()
+                                    // Only the answers leave this computer; the admin grades and stores them
+                                    graded = null
+                                    pendingSubmission = Submission(
+                                        token = current?.token.orEmpty(),
+                                        groupId = currentGroup?.id ?: -1,
+                                        studentId = currentStudentId,
+                                        studentName = studentName.ifBlank { "Anonim" },
+                                        answers = answers,
+                                        timeSpentSeconds = spent,
+                                        submissionId = java.util.UUID.randomUUID().toString()
+                                    )
+                                    submitPendingSubmission()
                                 } else {
-                                    AppContainer.localRepository.saveExamRecord(record)
-                                    pendingRecord = null
+                                    val outcome = Grading.grade(questions, answers)
+                                    AppContainer.localRepository.saveExamRecord(
+                                        ExamRecord(
+                                            studentName = studentName.ifBlank { "Anonim" },
+                                            lessonTitle = current?.title.orEmpty(),
+                                            totalQuestions = outcome.result.totalQuestions,
+                                            correctAnswers = outcome.result.correctAnswers,
+                                            wrongAnswers = outcome.result.wrongIndices.size,
+                                            wrongDetails = outcome.wrongDetails,
+                                            timeSpentSeconds = spent,
+                                            timestamp = System.currentTimeMillis(),
+                                            groupId = currentGroup?.id,
+                                            studentId = currentStudentId,
+                                            subjectId = currentGroup?.subjectId ?: current?.subjectId
+                                        )
+                                    )
+                                    graded = outcome.result
+                                    pendingSubmission = null
                                     submitStatus = null
                                 }
 
@@ -636,10 +640,11 @@ fun App() {
                         ResultScreen(
                             questions = questions,
                             userAnswers = userAnswers,
+                            graded = graded,
                             studentName = studentName,
                             timeSpentSeconds = timeSpent,
                             submitStatus = if (isNetworkMode) submitStatus else null,
-                            onRetrySubmit = { submitPendingRecord() },
+                            onRetrySubmit = { submitPendingSubmission() },
                             onFinish = {
                                 resetStudent()
                                 go(Screen.RoleSelection)

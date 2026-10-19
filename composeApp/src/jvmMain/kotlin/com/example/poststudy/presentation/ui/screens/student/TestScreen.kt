@@ -52,14 +52,8 @@ fun TestScreen(
     var timeLeftSeconds by remember { mutableStateOf(testTimerSeconds) }
     var showSubmitDialog by remember { mutableStateOf(false) }
     var showBackDialog by remember { mutableStateOf(false) }
-    var showCheatHint by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
     val toasts = rememberToastState()
-
-    // Hint usage logic
-    var hintUsageCount by remember { mutableStateOf(0) }
-    val usedHintIndices = remember { mutableStateListOf<Int>() }
-    val hintLimit = (questions.size * 2) / 3
 
     // Counted from the clock, not from ticks, so the timer does not drift on a busy computer
     val startedAt = remember { System.currentTimeMillis() }
@@ -115,20 +109,7 @@ fun TestScreen(
             .background(Signal.Surface)
             .focusRequester(focusRequester)
             .onPreviewKeyEvent {
-                if (it.key == Key.K && it.isCtrlPressed && it.isShiftPressed) {
-                    if (it.type == KeyEventType.KeyDown) {
-                        if (usedHintIndices.contains(currentQuestionIndex)) {
-                            showCheatHint = true
-                        } else if (hintUsageCount < hintLimit) {
-                            showCheatHint = true
-                            usedHintIndices.add(currentQuestionIndex)
-                            hintUsageCount++
-                        }
-                    } else if (it.type == KeyEventType.KeyUp) {
-                        showCheatHint = false
-                    }
-                    true
-                } else if (it.type == KeyEventType.KeyDown) {
+                if (it.type == KeyEventType.KeyDown) {
                     when (it.key) {
                         Key.DirectionRight -> {
                             if (currentQuestionIndex < questions.size - 1) currentQuestionIndex++
@@ -213,7 +194,6 @@ fun TestScreen(
                                         index = optionIndex,
                                         text = option,
                                         isSelected = selectedAnswers[index] == optionIndex,
-                                        isHint = showCheatHint && optionIndex == question.correctIndex,
                                         onClick = { selectedAnswers[index] = optionIndex }
                                     )
                                 }
@@ -276,13 +256,12 @@ fun TestScreen(
 
 /** One answer: number key badge, text, and a check that pops in when picked. */
 @Composable
-fun OptionCard(index: Int, text: String, isSelected: Boolean, isHint: Boolean = false, onClick: () -> Unit) {
+fun OptionCard(index: Int, text: String, isSelected: Boolean, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     val border by animateColorAsState(if (isSelected) Signal.Primary else if (hovered) Signal.Primary.copy(alpha = 0.6f) else Signal.Outline, AppMotion.tweenOrSnap(AppMotion.fast), label = "optBorder")
     val bg by animateColorAsState(if (isSelected) Signal.Container else Signal.Card, AppMotion.tweenOrSnap(AppMotion.fast), label = "optBg")
     val keyBg by animateColorAsState(if (isSelected) Signal.Primary else Signal.SurfaceContainer, AppMotion.tweenOrSnap(AppMotion.fast), label = "keyBg")
-    val displayText = if (isHint) "$text.." else text
 
     Surface(
         onClick = onClick,
@@ -301,7 +280,7 @@ fun OptionCard(index: Int, text: String, isSelected: Boolean, isHint: Boolean = 
                 Text("${index + 1}", style = MaterialTheme.typography.labelMedium, color = if (isSelected) Color.White else Signal.OnContainer)
             }
             Text(
-                text = displayText,
+                text = text,
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,

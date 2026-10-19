@@ -17,7 +17,9 @@ data class PreparedSession(
     val testTimerSeconds: Int,
     val subjectId: Int,
     /** The same slides as base64 JPEG, ready to send; empty when there are no slides. */
-    val encodedSlides: List<String> = emptyList()
+    val encodedSlides: List<String> = emptyList(),
+    /** Set on a student's computer in network mode: the admin grades answers under this token. */
+    val token: String? = null
 )
 
 /** Builds sessions from group assignments. Blocking: call from Dispatchers.IO. */
@@ -109,15 +111,17 @@ object SessionBuilder {
     private fun failure(message: String): Result<PreparedSession> = Result.failure(Exception(message))
 }
 
-fun PreparedSession.toSessionData(): SessionData = SessionData(
+/** Copy for the wire: the correct answers stay on the admin computer. */
+fun PreparedSession.toSessionData(token: String? = null): SessionData = SessionData(
     title = title,
-    questions = questions,
+    questions = questions.map { it.copy(correctIndex = -1) },
     slideTimerSeconds = slideTimerSeconds,
     testTimerSeconds = testTimerSeconds,
     mode = mode,
     subjectId = subjectId,
     kind = kind,
-    encodedSlides = encodedSlides
+    encodedSlides = encodedSlides,
+    token = token
 )
 
 fun SessionData.toPreparedSession(): PreparedSession = PreparedSession(
@@ -131,5 +135,6 @@ fun SessionData.toPreparedSession(): PreparedSession = PreparedSession(
     slideTimerSeconds = slideTimerSeconds,
     testTimerSeconds = testTimerSeconds,
     subjectId = subjectId,
-    encodedSlides = encodedSlides
+    encodedSlides = encodedSlides,
+    token = token
 )

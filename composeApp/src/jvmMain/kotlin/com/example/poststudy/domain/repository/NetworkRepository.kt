@@ -14,7 +14,7 @@ interface NetworkRepository {
     fun startServer(
         port: Int? = null,
         getSession: (groupId: Int) -> Result<SessionData>,
-        onRecordReceived: (ExamRecord) -> Unit,
+        onSubmission: (Submission) -> Result<GradedResult>,
         adminName: () -> String = { "" }
     ): Boolean
     fun stopServer()
@@ -32,5 +32,6 @@ interface NetworkRepository {
     fun fetchGroups(address: ServerAddress): Result<List<GroupOverview>>
     fun fetchStudents(address: ServerAddress, groupId: Int, password: String): Result<List<Student>>
     fun createStudentRemote(address: ServerAddress, name: String, groupId: Int, password: String): Result<Int>
-    fun submitResult(address: ServerAddress, record: ExamRecord, password: String): Result<Unit>
+    /** Sends the answers; the admin computer grades them and returns the score. */
+    fun submitAnswers(address: ServerAddress, submission: Submission, password: String): Result<GradedResult>
 }
