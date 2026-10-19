@@ -25,12 +25,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.example.poststudy.data.system.WindowsFirewall
 import com.example.poststudy.presentation.theme.AppDesign
+import com.example.poststudy.presentation.theme.Signal
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private val TextDark = Color(0xFF1E293B)
-private val TextMuted = Color(0xFF475569)
+private val TextDark = Signal.Ink
+private val TextMuted = Signal.Muted
 
 /** Firewall status plus step-by-step Windows 10/11 instructions for connection problems. */
 @Composable
@@ -47,7 +48,7 @@ fun NetworkHelpDialog(forAdmin: Boolean, onDismiss: () -> Unit) {
                 },
             shape = AppDesign.CardShape,
             color = Color.White,
-            border = BorderStroke(2.dp, AppDesign.Indigo.copy(alpha = 0.25f)),
+            border = BorderStroke(1.dp, Signal.Outline),
             shadowElevation = 12.dp
         ) {
             Column(Modifier.padding(32.dp)) {
@@ -58,7 +59,7 @@ fun NetworkHelpDialog(forAdmin: Boolean, onDismiss: () -> Unit) {
                         if (forAdmin) "Tarmoq va Windows Firewall sozlamalari" else "Admin topilmayaptimi?",
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Black,
-                        color = Color(0xFF065F46)
+                        color = Signal.Ink
                     )
                 }
                 Spacer(Modifier.height(16.dp))
@@ -171,11 +172,11 @@ private fun FirewallStatusCard() {
     LaunchedEffect(Unit) { refresh() }
 
     val (color, text) = when (status) {
-        null -> Color(0xFF64748B) to "Firewall holati tekshirilmoqda..."
+        null -> Signal.Muted to "Firewall holati tekshirilmoqda..."
         WindowsFirewall.Status.Allowed -> AppDesign.Emerald to "Windows Firewall BreakPoint'ga ruxsat bergan"
-        WindowsFirewall.Status.Blocked -> Color(0xFFDC2626) to "Windows Firewall BreakPoint'ni BLOKLAGAN — tinglovchilar ulana olmaydi"
-        WindowsFirewall.Status.NoRule -> Color(0xFFF59E0B) to "Firewall qoidasi hali yo'q — tarmoqni yoqqaningizda Windows ruxsat so'raydi"
-        WindowsFirewall.Status.Unknown -> Color(0xFF64748B) to "Firewall holatini aniqlab bo'lmadi"
+        WindowsFirewall.Status.Blocked -> Signal.Danger to "Windows Firewall BreakPoint'ni BLOKLAGAN — tinglovchilar ulana olmaydi"
+        WindowsFirewall.Status.NoRule -> Signal.Warning to "Firewall qoidasi hali yo'q — tarmoqni yoqqaningizda Windows ruxsat so'raydi"
+        WindowsFirewall.Status.Unknown -> Signal.Muted to "Firewall holatini aniqlab bo'lmadi"
     }
 
     Surface(

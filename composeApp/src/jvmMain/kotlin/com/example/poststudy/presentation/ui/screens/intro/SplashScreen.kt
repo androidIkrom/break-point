@@ -1,180 +1,101 @@
 package com.example.poststudy.presentation.ui.screens.intro
 
-import androidx.compose.animation.*
-import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
+import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.*
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.example.poststudy.presentation.theme.AppDesign
-import com.example.poststudy.presentation.ui.components.hoverEffect
-import com.example.poststudy.presentation.ui.components.AdaptiveGrid
-import com.example.poststudy.presentation.ui.components.ScrollableCentered
-import com.example.poststudy.presentation.ui.components.InstituteLogo
+import com.example.poststudy.presentation.theme.LocalReduceMotion
+import com.example.poststudy.presentation.theme.Signal
+import com.example.poststudy.presentation.ui.components.*
 import kotlinx.coroutines.delay
 
 @Composable
 fun SplashScreen(onContinue: () -> Unit) {
-    var visible by remember { mutableStateOf(false) }
+    val reduceMotion = LocalReduceMotion.current
+    var visible by remember { mutableStateOf(reduceMotion) }
     val focusRequester = remember { FocusRequester() }
-    
+    val parallax = rememberParallax()
+
     LaunchedEffect(Unit) {
-        delay(100)
+        delay(60)
         visible = true
-        focusRequester.requestFocus()
+        runCatching { focusRequester.requestFocus() }
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(AppDesign.BackgroundGradient)
+            .parallaxSource(parallax)
             .focusRequester(focusRequester)
-            .focusable() // Ensure it can catch Enter key
+            .focusable()
             .onPreviewKeyEvent {
                 if (it.key == Key.Enter && it.type == KeyEventType.KeyDown) {
                     onContinue()
                     true
                 } else false
-            },
-        contentAlignment = Alignment.Center
-    ) {
-        ScrollableCentered(Modifier.fillMaxSize().padding(horizontal = 32.dp, vertical = 24.dp)) {
-            Column(
-                modifier = Modifier.widthIn(max = 1100.dp).fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-            AnimatedVisibility(
-                visible = visible,
-                enter = fadeIn() + expandVertically()
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    InstituteLogo(size = 200.dp)
-                    
-                    Spacer(modifier = Modifier.height(24.dp))
-                    
-                    Text(
-                        text = "BreakPoint",
-                        style = MaterialTheme.typography.displayMedium,
-                        fontWeight = FontWeight.Black,
-                        color = Color(0xFF064E3B)
-                    )
-                    
-                    Text(
-                        text = "Bilimlarni mustahkamlash va baholash tizimi",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Color(0xFF059669),
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-                }
             }
+    ) {
+        SignalBackground(parallax = parallax.value)
 
-            Spacer(modifier = Modifier.height(64.dp))
+        ScrollableCentered(Modifier.fillMaxSize().padding(horizontal = 56.dp, vertical = 32.dp)) {
+            Column(Modifier.widthIn(max = 1100.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(32.dp)) {
+                Reveal(visible, 0) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        InstituteLogo(size = 140.dp, glow = true)
+                        Spacer(Modifier.height(8.dp))
+                        Text("BreakPoint", style = MaterialTheme.typography.displayLarge, color = Signal.OnDark)
+                        Text("Bilimlarni mustahkamlash va baholash tizimi", style = MaterialTheme.typography.bodyLarge, color = Signal.OnDarkMuted, textAlign = TextAlign.Center)
+                    }
+                }
 
-            AnimatedVisibility(
-                visible = visible,
-                enter = fadeIn() + slideInVertically { it / 2 }
-            ) {
                 AdaptiveGrid(
                     items = listOf(
-                        Triple(Icons.Default.Person, "Admin - pedagoglar uchun", "Dars materiallarini yuklang, testlar yarating va tinglovchilar natijalarini real vaqtda kuzating."),
-                        Triple(Icons.Default.Face, "Tinglovchilar uchun", "Taqdimotlarni ko'rib chiqing, bilimlaringizni sinab ko'ring va natijalaringizni darhol bilib oling."),
-                        Triple(Icons.Default.CloudSync, "Tarmoq", "Lokal tarmoq orqali pedagoglar va tinglovchilar o'rtasida ma'lumotlarni oson almashing.")
+                        SplashItem(Icons.Default.Person, "Admin - pedagoglar uchun", "Dars materiallarini yuklang, testlar yarating va tinglovchilar natijalarini real vaqtda kuzating.", Signal.GradientPrimary, 100),
+                        SplashItem(Icons.Default.Face, "Tinglovchilar uchun", "Taqdimotlarni ko'rib chiqing, bilimlaringizni sinab ko'ring va natijalaringizni darhol bilib oling.", Signal.GradientCyanAmber, 160),
+                        SplashItem(Icons.Default.CloudSync, "Tarmoq", "Lokal tarmoq orqali pedagoglar va tinglovchilar o'rtasida ma'lumotlarni oson almashing.", Signal.GradientAmberPrimary, 220)
                     ),
-                    minItemWidth = 240.dp,
+                    minItemWidth = 260.dp,
+                    spacing = 18.dp,
                     modifier = Modifier.fillMaxWidth()
-                ) { (icon, title, description), itemModifier ->
-                    InstructionCard(
-                        modifier = itemModifier.hoverEffect(),
-                        icon = icon,
-                        title = title,
-                        description = description
-                    )
+                ) { item, itemModifier ->
+                    Reveal(visible, item.delay, itemModifier) {
+                        GlassCard(Modifier.fillMaxWidth()) {
+                            GradientTile(item.brush, size = 48.dp) {
+                                Icon(item.icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
+                            }
+                            Spacer(Modifier.height(14.dp))
+                            Text(item.title, style = MaterialTheme.typography.titleLarge, color = Signal.OnDark)
+                            Spacer(Modifier.height(6.dp))
+                            Text(item.description, style = MaterialTheme.typography.bodyMedium, color = Signal.OnDarkMuted)
+                        }
+                    }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(40.dp))
-
-            AnimatedVisibility(
-                visible = visible,
-                enter = fadeIn() + slideInVertically { it }
-            ) {
-                Button(
-                    onClick = onContinue,
-                    modifier = Modifier.width(300.dp).height(64.dp).hoverEffect(),
-                    shape = AppDesign.ComponentShape,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
-                ) {
-                    Text(
-                        "Boshlash",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Black
-                    )
+                Reveal(visible, 300) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        SignalButton("Boshlash", onClick = onContinue, style = ButtonStyle.Cyan, height = 52.dp, contentPadding = PaddingValues(horizontal = 40.dp))
+                        Text("Enter — boshlash", style = MaterialTheme.typography.bodySmall, color = Signal.OnDarkFaint)
+                    }
                 }
             }
         }
     }
-    }
 }
 
-@Composable
-fun InstructionCard(
-    modifier: Modifier = Modifier,
-    icon: ImageVector,
-    title: String,
-    description: String
-) {
-    Card(
-        modifier = modifier,
-        shape = AppDesign.CardShape,
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Surface(
-                color = Color(0xFFF0FDF4),
-                shape = CircleShape,
-                modifier = Modifier.size(56.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(icon, contentDescription = null, tint = Color(0xFF10B981))
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF1E293B),
-                textAlign = TextAlign.Center
-            )
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            Text(
-                text = description,
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFF64748B),
-                textAlign = TextAlign.Center,
-                lineHeight = MaterialTheme.typography.bodyMedium.lineHeight * 1.2
-            )
-        }
-    }
-}
+private class SplashItem(val icon: ImageVector, val title: String, val description: String, val brush: Brush, val delay: Int)

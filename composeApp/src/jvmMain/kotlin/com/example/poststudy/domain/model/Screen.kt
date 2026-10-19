@@ -62,7 +62,9 @@ data class ExamRecord(
     val timestamp: Long,
     val groupId: Int? = null,
     val studentId: Int? = null,
-    val subjectId: Int? = null
+    val subjectId: Int? = null,
+    /** Random id a student's app attaches to a network submit; null for local results. */
+    val submissionId: String? = null
 )
 
 enum class UserRole {

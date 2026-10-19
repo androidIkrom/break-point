@@ -8,5 +8,5 @@ object AppInfo {
      * Version of the admin/student network protocol. Raise it whenever requests or replies change
      * incompatibly, so students with an older/newer app get a clear message instead of odd errors.
      */
-    const val PROTOCOL_VERSION = 2
+    const val PROTOCOL_VERSION = 3
 }

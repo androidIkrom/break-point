@@ -1,35 +1,35 @@
 package com.example.poststudy.presentation.ui.components
 
-import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.HelpOutline
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.example.poststudy.presentation.theme.Signal
 
 @Composable
 fun HelpIcon(
     title: String,
     helpText: String,
     modifier: Modifier = Modifier,
-    tint: Color = Color(0xFF64748B)
+    tint: Color = Signal.Muted,
+    onDark: Boolean = false
 ) {
     var showDialog by remember { mutableStateOf(false) }
 
-    IconButton(
+    SignalIconButton(
+        icon = Icons.AutoMirrored.Outlined.HelpOutline,
+        contentDescription = "Yordam",
         onClick = { showDialog = true },
-        modifier = modifier.size(48.dp)
-    ) {
-        Icon(
-            imageVector = Icons.AutoMirrored.Filled.HelpOutline,
-            contentDescription = "Yordam",
-            tint = tint,
-            modifier = Modifier.size(28.dp)
-        )
-    }
+        modifier = modifier,
+        tint = if (onDark) Signal.OnDark else tint,
+        container = if (onDark) Signal.GlassFill else Signal.Card,
+        borderColor = if (onDark) Signal.GlassBorderStrong else Signal.OutlineStrong,
+        size = 40.dp,
+        iconSize = 20.dp,
+        onDark = onDark
+    )
 
     if (showDialog) {
         PostStudyDialog(
@@ -37,6 +37,7 @@ fun HelpIcon(
             title = title,
             text = helpText,
             confirmText = "Tushunarli",
+            showDismissButton = false,
             onConfirm = { showDialog = false }
         )
     }

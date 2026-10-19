@@ -1,38 +1,38 @@
 package com.example.poststudy.presentation.ui.screens.network
 
-import com.example.poststudy.presentation.ui.components.ScrollableCentered
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Lan
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.focusable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.*
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.poststudy.data.network.ActiveAdmin
+import com.example.poststudy.data.network.ServerAddress
+import com.example.poststudy.di.AppContainer
+import com.example.poststudy.presentation.theme.AppDesign
+import com.example.poststudy.presentation.theme.Signal
+import com.example.poststudy.presentation.theme.Space
+import com.example.poststudy.presentation.ui.components.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import com.example.poststudy.presentation.ui.components.BackButton
-import com.example.poststudy.presentation.ui.components.NetworkHelpDialog
-import com.example.poststudy.di.AppContainer
-import com.example.poststudy.data.network.ActiveAdmin
-import com.example.poststudy.data.network.ServerAddress
-import com.example.poststudy.presentation.theme.AppDesign
 import java.util.prefs.Preferences
 
 private val prefs: Preferences? = try {
@@ -43,15 +43,10 @@ private val prefs: Preferences? = try {
 private const val LAST_ADDRESS_KEY = "last_server_address"
 private const val SCAN_INTERVAL_MS = 3000L
 
-private val Indigo = Color(0xFF6366F1)
-private val TextDark = Color(0xFF1E293B)
-private val TextMuted = Color(0xFF64748B)
-
 /** Typed text that is meant as an IP/host rather than an admin's name. */
 private fun looksLikeAddress(text: String): Boolean =
     text.any { it == '.' || it == ':' } || text.all { it.isDigit() }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NetworkConnectScreen(
     onConnected: (ServerAddress) -> Unit,
@@ -65,6 +60,9 @@ fun NetworkConnectScreen(
     var scanRequest by remember { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
     var showHelp by remember { mutableStateOf(false) }
+    // Key events reach the screen only while something in it has focus
+    val screenFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { screenFocus.requestFocus() } }
 
     if (showHelp) {
         NetworkHelpDialog(forAdmin = false, onDismiss = { showHelp = false })
@@ -122,208 +120,156 @@ fun NetworkConnectScreen(
         }
     }
 
-    Box(
-        modifier = Modifier
+    Column(
+        Modifier
             .fillMaxSize()
-            .background(AppDesign.BackgroundGradient),
-        contentAlignment = Alignment.Center
-    ) {
-        Scaffold(
-            containerColor = Color.Transparent,
-            topBar = {
-                TopAppBar(
-                    title = {
-                        Text(
-                            "Tarmoqqa ulanish",
-                            color = Color(0xFF065F46),
-                            fontWeight = FontWeight.Black
-                        )
-                    },
-                    navigationIcon = {
-                        BackButton(onClick = onBack)
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-                )
+            .background(Signal.Surface)
+            .focusRequester(screenFocus)
+            .focusable()
+            // Esc leaves the screen even while the address field has focus
+            .onPreviewKeyEvent {
+                if (it.key == Key.Escape && it.type == KeyEventType.KeyDown) {
+                    onBack()
+                    true
+                } else false
             }
-        ) { paddingValues ->
-            ScrollableCentered(Modifier.fillMaxSize().padding(paddingValues)) {
-                Card(
-                    modifier = Modifier.widthIn(max = 580.dp).fillMaxWidth().padding(16.dp),
-                    shape = AppDesign.CardShape,
-                    elevation = CardDefaults.cardElevation(defaultElevation = 16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    border = BorderStroke(3.dp, Indigo.copy(alpha = 0.3f))
-                ) {
-                    Column(
-                        modifier = Modifier.padding(horizontal = 40.dp, vertical = 32.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            Icons.Default.Lan,
-                            contentDescription = null,
-                            modifier = Modifier.size(48.dp),
-                            tint = Indigo
-                        )
-                        Spacer(Modifier.height(12.dp))
+    ) {
+        // Dark band: radar finds the admins
+        Box(Modifier.fillMaxWidth().height(400.dp)) {
+            SignalBackground()
+            Column(Modifier.fillMaxSize().padding(horizontal = Space.page, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    BackButton(onClick = onBack, onDark = true, modifier = Modifier.padding(start = 0.dp))
+                    Text("Tarmoqqa ulanish", style = MaterialTheme.typography.titleLarge, color = Signal.OnDark)
+                    Spacer(Modifier.weight(1f))
+                    GlassPill(if (isScanning) "Qidirilmoqda · UDP 8099" else "Ro'yxat yangilangan", live = isScanning)
+                    SignalIconButton(Icons.Outlined.Refresh, "Yangilash", { scanRequest++ }, tint = Signal.OnDark, container = Signal.GlassFill, borderColor = Signal.GlassBorderStrong, size = 40.dp, iconSize = 18.dp, onDark = true)
+                    SignalButton("Admin topilmayaptimi?", onClick = { showHelp = true }, style = ButtonStyle.Glass, height = 40.dp, contentPadding = PaddingValues(horizontal = 14.dp))
+                }
+                Column(Modifier.widthIn(max = 680.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Eyebrow("Faol adminlar · ${admins.size}", color = Signal.Amber)
+                    Text(
+                        if (admins.isEmpty()) "Radar adminlarni qidirmoqda" else "Radar adminlarni topdi. Birini tanlang.",
+                        style = MaterialTheme.typography.displaySmall,
+                        color = Signal.OnDark
+                    )
+                    Text(
+                        "Bir xil lokal tarmoqdagi barcha \"Tarmoq yoqilgan\" adminlar shu yerda ko'rinadi. Ro'yxat har 3 soniyada yangilanadi.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Signal.OnDarkMuted
+                    )
+                }
+                Spacer(Modifier.weight(1f))
+                if (admins.isEmpty()) {
+                    GlassCard(Modifier.widthIn(max = 560.dp), padding = 16.dp) {
                         Text(
-                            text = "Adminga ulanish",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Black,
-                            color = TextDark
-                        )
-                        Text(
-                            text = "Ro'yxatdan adminni tanlang yoki uning username'ini yozing",
+                            if (isScanning) "Tarmoqdan qidirilmoqda..." else "Hozircha faol admin topilmadi. Admin \"Tarmoqqa ulanish\" tugmasini bosgan bo'lishi kerak.",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = TextMuted,
-                            modifier = Modifier.padding(top = 4.dp, bottom = 20.dp)
+                            color = Signal.OnDarkMuted
                         )
-
-                        ActiveAdminsList(
-                            admins = admins,
-                            isScanning = isScanning,
-                            enabled = !isLoading,
-                            onRefresh = { scanRequest++ },
-                            onSelect = { admin ->
-                                input = admin.name
-                                val problem = admin.problem
-                                if (problem != null) errorMessage = problem else open(admin.address.toString(), admin.name)
-                            }
-                        )
-
-                        TextButton(onClick = { showHelp = true }) {
-                            Text("Admin topilmayaptimi?", color = Indigo, fontWeight = FontWeight.Bold)
-                        }
-
-                        Spacer(Modifier.height(8.dp))
-
-                        if (errorMessage.isNotEmpty()) {
-                            Text(
-                                text = errorMessage,
-                                color = Color(0xFFB91C1C),
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Bold,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.padding(bottom = 12.dp)
-                            )
-                        }
-
-                        OutlinedTextField(
-                            value = input,
-                            onValueChange = { input = it; errorMessage = "" },
-                            label = { Text("Admin username") },
-                            supportingText = { Text("Ro'yxat bo'sh bo'lsa, admin ekranidagi IP manzilni yozing") },
-                            leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) },
-                            modifier = Modifier.fillMaxWidth().onPreviewKeyEvent {
-                                if (it.key == Key.Enter && it.type == KeyEventType.KeyDown) {
-                                    connectTyped()
-                                    true
-                                } else false
-                            },
-                            shape = AppDesign.ComponentShape,
-                            singleLine = true,
-                            enabled = !isLoading,
-                            isError = errorMessage.isNotEmpty(),
-                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Indigo)
-                        )
-
-                        Spacer(Modifier.height(16.dp))
-
-                        Button(
-                            onClick = { connectTyped() },
-                            modifier = Modifier.fillMaxWidth().height(60.dp),
-                            shape = AppDesign.ComponentShape,
-                            colors = ButtonDefaults.buttonColors(containerColor = Indigo),
-                            enabled = !isLoading
-                        ) {
-                            if (isLoading) {
-                                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
-                            } else {
-                                Text("ULANISH", fontWeight = FontWeight.Black)
+                    }
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(300.dp),
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 170.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(admins, key = { "${it.address.host}:${it.address.port}" }) { admin ->
+                            val problem = admin.problem
+                            GlassCard(
+                                Modifier.fillMaxWidth(),
+                                padding = 16.dp,
+                                onClick = {
+                                    input = admin.name
+                                    if (problem != null) errorMessage = problem else open(admin.address.toString(), admin.name)
+                                }
+                            ) { hovered ->
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    InitialsAvatar(admin.name, Modifier.glassIcon(hovered), size = 44.dp, gradient = true)
+                                    Column(Modifier.weight(1f)) {
+                                        Text(admin.name, style = MaterialTheme.typography.titleMedium, color = Signal.OnDark, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text(
+                                            if (problem != null) "${admin.address} · versiya mos emas" else admin.address.toString(),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = if (problem != null) Signal.DangerOnDark else Signal.OnDarkMuted
+                                        )
+                                    }
+                                    if (problem == null) LiveDot()
+                                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = Signal.Cyan, modifier = Modifier.size(16.dp))
+                                }
                             }
                         }
                     }
                 }
             }
         }
-    }
-}
 
-@Composable
-private fun ActiveAdminsList(
-    admins: List<ActiveAdmin>,
-    isScanning: Boolean,
-    enabled: Boolean,
-    onRefresh: () -> Unit,
-    onSelect: (ActiveAdmin) -> Unit
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = AppDesign.ComponentShape,
-        color = Color(0xFFF8FAFC),
-        border = BorderStroke(2.dp, Color(0xFFE2E8F0))
-    ) {
-        Column(Modifier.padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(10.dp).background(if (admins.isEmpty()) Color(0xFF94A3B8) else AppDesign.Emerald, CircleShape))
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    "Faol adminlar (${admins.size})",
-                    fontWeight = FontWeight.Black,
-                    color = TextDark,
-                    modifier = Modifier.weight(1f)
-                )
-                if (isScanning) {
-                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = Indigo)
-                } else {
-                    IconButton(onClick = onRefresh, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Yangilash", tint = Indigo)
-                    }
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            if (admins.isEmpty()) {
-                Box(Modifier.fillMaxWidth().height(96.dp), contentAlignment = Alignment.Center) {
-                    Text(
-                        if (isScanning) "Tarmoqdan qidirilmoqda..."
-                        else "Hozircha faol admin topilmadi.\nAdmin \"Tarmoqqa ulanish\" tugmasini bosgan bo'lishi kerak.",
-                        color = TextMuted,
-                        textAlign = TextAlign.Center,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    items(admins, key = { "${it.address.host}:${it.address.port}" }) { admin ->
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .clip(AppDesign.ComponentShape)
-                                .background(Color.White)
-                                .clickable(enabled = enabled) { onSelect(admin) }
-                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                Modifier.size(36.dp).background(Indigo.copy(alpha = 0.12f), CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Default.Person, contentDescription = null, tint = Indigo, modifier = Modifier.size(20.dp))
+        // Light part: manual connection
+        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+            Row(
+                Modifier.widthIn(max = Space.contentMaxWidth + Space.page * 2).fillMaxWidth().padding(horizontal = Space.page, vertical = Space.xl),
+                horizontalArrangement = Arrangement.spacedBy(18.dp)
+            ) {
+                SignalCard(Modifier.weight(1.3f), padding = 22.dp) {
+                    Text("Ro'yxatda yo'qmi? Qo'lda ulaning", style = MaterialTheme.typography.headlineSmall, color = Signal.Ink)
+                    Text("Admin ekranidagi \"Sizning IP\" manzilini yoki username'ini yozing.", style = MaterialTheme.typography.bodyMedium, color = Signal.Muted)
+                    Spacer(Modifier.height(16.dp))
+                    if (errorMessage.isNotEmpty()) {
+                        Surface(shape = AppDesign.ComponentShape, color = Signal.DangerContainer, border = BorderStroke(1.dp, Signal.DangerBorder), modifier = Modifier.padding(bottom = 12.dp)) {
+                            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Icon(Icons.Outlined.ErrorOutline, contentDescription = null, tint = Signal.Danger, modifier = Modifier.size(18.dp))
+                                Text(errorMessage, color = Signal.OnDangerContainer, style = MaterialTheme.typography.bodyMedium)
                             }
-                            Spacer(Modifier.width(12.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(admin.name, fontWeight = FontWeight.Black, color = TextDark, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text(
-                                    admin.problem?.let { "${admin.address} • versiya mos emas" } ?: admin.address.toString(),
-                                    color = if (admin.problem != null) Color(0xFFDC2626) else TextMuted,
-                                    style = MaterialTheme.typography.labelSmall
-                                )
-                            }
-                            Text("Ulanish ›", color = Indigo, fontWeight = FontWeight.Bold)
                         }
                     }
+                    Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Admin username yoki IP manzil", style = MaterialTheme.typography.labelLarge, color = Signal.Ink)
+                            OutlinedTextField(
+                                value = input,
+                                onValueChange = { input = it; errorMessage = "" },
+                                leadingIcon = { Icon(Icons.Default.Lan, contentDescription = null, tint = Signal.Muted) },
+                                placeholder = { Text("masalan, admin yoki 192.168.1.5") },
+                                modifier = Modifier.fillMaxWidth().onPreviewKeyEvent {
+                                    if (it.key == Key.Enter && it.type == KeyEventType.KeyDown) {
+                                        connectTyped()
+                                        true
+                                    } else false
+                                },
+                                shape = AppDesign.SmallShape,
+                                singleLine = true,
+                                enabled = !isLoading,
+                                isError = errorMessage.isNotEmpty()
+                            )
+                        }
+                        SignalButton(
+                            text = if (isLoading) "Ulanmoqda..." else "Ulanish",
+                            onClick = { connectTyped() },
+                            enabled = !isLoading,
+                            style = ButtonStyle.Primary,
+                            height = 48.dp,
+                            contentPadding = PaddingValues(horizontal = 24.dp)
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Text("Enter — ulanish · Esc — orqaga", style = MaterialTheme.typography.bodySmall, color = Signal.Muted)
+                }
+                SignalCard(Modifier.weight(1f), padding = 22.dp, color = Signal.WarningContainer, borderColor = Signal.WarningBorder) {
+                    Text("Admin topilmasa", style = MaterialTheme.typography.titleMedium, color = Signal.OnWarningContainer)
+                    Spacer(Modifier.height(8.dp))
+                    listOf(
+                        "Ikkala kompyuter bitta tarmoqda bo'lsin (bir router yoki Wi-Fi).",
+                        "Admin \"Tarmoqqa ulanish\" tugmasini bosgan bo'lsin.",
+                        "IP bilan ham ulanmasa: admin kompyuterida Firewall ruxsati kerak."
+                    ).forEachIndexed { i, tip ->
+                        Row(Modifier.padding(vertical = 3.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("${i + 1}.", style = MaterialTheme.typography.labelLarge, color = Signal.OnWarningContainer)
+                            Text(tip, style = MaterialTheme.typography.bodySmall, color = Signal.OnWarningContainer)
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    SignalButton("Firewall ko'rsatmalari", onClick = { showHelp = true }, style = ButtonStyle.Outlined, height = 36.dp)
                 }
             }
         }

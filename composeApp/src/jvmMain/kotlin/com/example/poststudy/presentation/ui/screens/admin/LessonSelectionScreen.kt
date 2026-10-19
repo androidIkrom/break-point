@@ -1,35 +1,40 @@
 package com.example.poststudy.presentation.ui.screens.admin
 
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Quiz
+import androidx.compose.material.icons.outlined.Slideshow
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import java.io.File
-import com.example.poststudy.presentation.ui.components.BackButton
 import com.example.poststudy.di.AppContainer
 import com.example.poststudy.domain.model.Lesson
 import com.example.poststudy.domain.model.LessonMode
+import com.example.poststudy.domain.model.Subject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import com.example.poststudy.presentation.theme.AppDesign
-import com.example.poststudy.presentation.ui.components.hoverEffect
-import com.example.poststudy.presentation.ui.components.PostStudyDialog
+import com.example.poststudy.presentation.theme.Signal
+import com.example.poststudy.presentation.theme.Space
+import com.example.poststudy.presentation.ui.components.*
+import com.example.poststudy.presentation.ui.screens.groups.EmptyBox
+import com.example.poststudy.presentation.ui.screens.groups.LoadingBox
+import java.io.File
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LessonSelectionScreen(
     subjectId: Int,
@@ -43,10 +48,22 @@ fun LessonSelectionScreen(
     val lessons = remember { mutableStateListOf<Lesson>() }
     var isLoading by remember { mutableStateOf(true) }
     var lessonToDelete by remember { mutableStateOf<Lesson?>(null) }
+    var filter by remember { mutableStateOf<LessonMode?>(null) }
 
-    LaunchedEffect(subjectId) {
+    // Students are not tied to the subject the admin last opened: they pick their own
+    var subjects by remember { mutableStateOf<List<Subject>>(emptyList()) }
+    var studentSubjectId by remember { mutableStateOf(subjectId) }
+    LaunchedEffect(isTeacher) {
+        if (isTeacher) return@LaunchedEffect
+        val all = withContext(Dispatchers.IO) { AppContainer.localRepository.getAllSubjects().first() }
+        subjects = all
+        if (all.none { it.id == studentSubjectId }) all.firstOrNull()?.let { studentSubjectId = it.id }
+    }
+    val activeSubjectId = if (isTeacher) subjectId else studentSubjectId
+
+    LaunchedEffect(activeSubjectId) {
         isLoading = true
-        AppContainer.localRepository.getAllLessons(subjectId).collect { all ->
+        AppContainer.localRepository.getAllLessons(activeSubjectId).collect { all ->
             lessons.clear()
             lessons.addAll(if (isTeacher) all else all.filter { it.mode.hasSlides })
             isLoading = false
@@ -59,7 +76,7 @@ fun LessonSelectionScreen(
             title = "Darsni o'chirish",
             text = "'${lessonToDelete?.title}' darsini o'chirishni xohlaysizmi? Bu amalni qaytarib bo'lmaydi.",
             confirmText = "O'chirish",
-            confirmColor = Color(0xFFEF4444),
+            confirmColor = Signal.Danger,
             onConfirm = {
                 lessonToDelete?.let {
                     AppContainer.localRepository.deleteLesson(it.id)
@@ -70,89 +87,112 @@ fun LessonSelectionScreen(
         )
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AppDesign.BackgroundGradient)
-    ) {
-        Scaffold(
-            containerColor = Color.Transparent,
-            topBar = {
-                TopAppBar(
-                    title = { Text(if (isTeacher) "Darslar ro'yxati" else "Dars tanlash", color = Color(0xFF065F46), fontWeight = FontWeight.Black) },
-                    navigationIcon = {
-                        BackButton(onClick = onBack)
-                    },
-                    actions = {
-                        Row(modifier = Modifier.padding(top = 16.dp, end = 46.dp)){
-                            if (isTeacher) {
-                                IconButton(onClick = onViewHistory) {
-                                    Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Tarix", tint = Color(0xFF10B981))
-                                }
-                                IconButton(onClick = onAddNewLesson) {
-                                    Icon(Icons.Default.Add, contentDescription = "Qo'shish", tint = Color(0xFF3B82F6))
-                                }
-                            }
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-                )
+    val shown = lessons.filter { filter == null || it.mode == filter }
+
+    val grid: @Composable () -> Unit = {
+        when {
+            isLoading -> LoadingBox()
+            lessons.isEmpty() -> EmptyBox(
+                Icons.AutoMirrored.Outlined.MenuBook,
+                "Darslar hali qo'shilmagan",
+                if (isTeacher) "Birinchi darsni yarating: taqdimot va test faylini tanlang, taymerlarni belgilang." else "Admin dars qo'shganda shu yerda ko'rinadi.",
+                action = if (isTeacher) ({ SignalButton("Birinchi darsni yaratish", onClick = onAddNewLesson, icon = Icons.Default.Add, style = ButtonStyle.Gradient) }) else null
+            )
+            else -> LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 340.dp),
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = Space.page, vertical = Space.l),
+                horizontalArrangement = Arrangement.spacedBy(Space.l),
+                verticalArrangement = Arrangement.spacedBy(Space.l)
+            ) {
+                itemsIndexed(shown, key = { _, l -> l.id }) { index, lesson ->
+                    LessonCard(
+                        lesson = lesson,
+                        index = index,
+                        isTeacher = isTeacher,
+                        onSelect = { onLessonSelected(lesson) },
+                        onEdit = { onEditLesson(lesson) },
+                        onDelete = { lessonToDelete = lesson }
+                    )
+                }
+                if (isTeacher) {
+                    itemsIndexed(listOf(Unit), key = { _, _ -> "add" }) { _, _ ->
+                        AddCard("Yangi dars", "PowerPoint va Word test faylini tanlang, taymerlarni belgilang", onAddNewLesson)
+                    }
+                }
             }
-        ) { paddingValues ->
-            if (isLoading) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = Color(0xFF10B981))
+        }
+    }
+
+    val filters: @Composable () -> Unit = {
+        Row(Modifier.padding(horizontal = Space.page, vertical = Space.m), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            SignalChip("Hammasi · ${lessons.size}", filter == null, { filter = null })
+            LessonMode.entries.forEach { mode ->
+                val count = lessons.count { it.mode == mode }
+                if (count > 0 || isTeacher) SignalChip("${mode.label} · $count", filter == mode, { filter = if (filter == mode) null else mode })
+            }
+            Spacer(Modifier.weight(1f))
+            Text(if (isTeacher) "Darsni bosib guruhlarga biriktiring" else "Darsni bosib taqdimotni oching", style = MaterialTheme.typography.bodySmall, color = Signal.Muted)
+        }
+    }
+
+    if (isTeacher) {
+        AdminPage(
+            title = "Darslar · ${lessons.size}",
+            eyebrow = "Materiallar",
+            actions = {
+                HelpIcon(
+                    title = "Darslarni tanlash",
+                    helpText = "Darsni bosib uni guruhlarga biriktiring va rejimini tanlang. Yangi dars qo'shish uchun + tugmasidan foydalaning."
+                )
+                SignalIconButton(Icons.Outlined.History, "Tarix", onViewHistory, size = 42.dp, iconSize = 20.dp)
+                SignalButton("Dars qo'shish", onClick = onAddNewLesson, icon = Icons.Default.Add, style = ButtonStyle.Gradient, height = 42.dp)
+            }
+        ) {
+            Column(Modifier.fillMaxSize()) {
+                filters()
+                Box(Modifier.weight(1f)) { grid() }
+            }
+        }
+    } else {
+        Column(Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxWidth().height(170.dp)) {
+                SignalBackground(alpha = 0.85f)
+                Column(Modifier.fillMaxSize().padding(horizontal = Space.page, vertical = 16.dp)) {
+                    BackButton(onClick = onBack, onDark = true, modifier = Modifier.padding(start = 0.dp))
+                    Spacer(Modifier.weight(1f))
+                    Eyebrow("Tayyorgarlik", color = Signal.Amber)
+                    Text("Dars tanlash", style = MaterialTheme.typography.displaySmall, color = Signal.OnDark)
+                    Text("Taqdimotni taymersiz, o'z sur'atingizda ko'rib chiqing.", style = MaterialTheme.typography.bodyMedium, color = Signal.OnDarkMuted)
                 }
-            } else if (lessons.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = null, modifier = Modifier.size(80.dp), tint = Color(0xFF10B981).copy(alpha = 0.2f))
-                        Spacer(Modifier.height(24.dp))
-                        Text("Darslar hali qo'shilmagan", color = Color(0xFF64748B), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        if (isTeacher) {
-                            Button(
-                                onClick = onAddNewLesson,
-                                modifier = Modifier.padding(top = 32.dp).height(64.dp).width(280.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981), contentColor = Color.White),
-                                shape = AppDesign.ComponentShape,
-                                elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)
-                            ) {
-                                Text("BIRINCHI DARSNI YARATISH", fontWeight = FontWeight.Black)
+            }
+            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+                Column(Modifier.widthIn(max = Space.contentMaxWidth + Space.page * 2).fillMaxSize()) {
+                    if (subjects.size > 1) {
+                        Row(
+                            Modifier.padding(start = Space.page, end = Space.page, top = Space.m),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Fan:", style = MaterialTheme.typography.labelLarge, color = Signal.Ink)
+                            subjects.forEach { subject ->
+                                SignalChip(subject.name, subject.id == studentSubjectId, { studentSubjectId = subject.id })
                             }
                         }
                     }
-                }
-            } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 400.dp),
-                    modifier = Modifier.fillMaxSize().padding(paddingValues).padding(32.dp),
-                    horizontalArrangement = Arrangement.spacedBy(32.dp),
-                    verticalArrangement = Arrangement.spacedBy(32.dp),
-                    contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp)
-                ) {
-                    itemsIndexed(lessons) { index, lesson ->
-                        val color = AppDesign.RainbowPalette[index % AppDesign.RainbowPalette.size]
-                        LessonCard(
-                            lesson = lesson,
-                            isTeacher = isTeacher,
-                            themeColor = color,
-                            onSelect = { onLessonSelected(lesson) },
-                            onEdit = { onEditLesson(lesson) },
-                            onDelete = { lessonToDelete = lesson }
-                        )
-                    }
+                    filters()
+                    Box(Modifier.weight(1f)) { grid() }
                 }
             }
         }
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun LessonCard(
     lesson: Lesson,
+    index: Int,
     isTeacher: Boolean,
-    themeColor: Color = Color(0xFF10B981),
     onSelect: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
@@ -161,83 +201,48 @@ fun LessonCard(
     val testExists = !lesson.mode.hasTest || File(lesson.testPath).exists()
     val hasError = !presentationExists || !testExists
 
-    Surface(
+    SignalCard(
+        modifier = Modifier.fillMaxWidth(),
         onClick = onSelect,
-        modifier = Modifier.fillMaxWidth().heightIn(min = 190.dp).hoverEffect(scale = 1.03f, yOffset = -6f),
-        shape = AppDesign.CardShape,
-        color = if (hasError) Color(0xFFFFF1F2) else Color.White,
-        border = BorderStroke(4.dp, if (hasError) Color.Red.copy(alpha = 0.5f) else themeColor.copy(alpha = 0.5f)),
-        shadowElevation = 12.dp
+        padding = 0.dp,
+        borderColor = if (hasError) Signal.DangerBorder else Signal.Outline
     ) {
-        Column(
-            modifier = Modifier.padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = lesson.title,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Black,
-                        color = if (hasError) Color(0xFF991B1B) else themeColor,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    if (hasError) {
-                        Text(
-                            text = "FAYL TOPILMADI",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.Red,
-                            fontWeight = FontWeight.Bold
-                        )
-                    } else {
-                        Text(
-                            text = lesson.mode.label.uppercase(),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = themeColor.copy(alpha = 0.8f),
-                            fontWeight = FontWeight.Black
-                        )
-                    }
+        LessonCover(index, Modifier.fillMaxWidth().height(104.dp), danger = hasError) {
+            Box(Modifier.fillMaxSize().padding(12.dp)) {
+                if (hasError) {
+                    StatusChip("Fayl topilmadi", Color.White.copy(alpha = 0.18f), Color.White, icon = Icons.Outlined.WarningAmber, iconTint = Color.White)
+                } else {
+                    StatusChip(lesson.mode.label, Color.White.copy(alpha = 0.14f), Color.White)
                 }
-
-                if (isTeacher) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        IconButton(
-                            onClick = onEdit,
-                            modifier = Modifier.background(themeColor.copy(alpha = 0.1f), CircleShape)
-                        ) {
-                            Icon(Icons.Default.Edit, contentDescription = "Tahrirlash", tint = themeColor)
-                        }
-                        IconButton(
-                            onClick = onDelete,
-                            modifier = Modifier.background(Color(0xFFEF4444).copy(alpha = 0.1f), CircleShape)
-                        ) {
-                            Icon(Icons.Default.Delete, contentDescription = "O'chirish", tint = Color(0xFFEF4444))
-                        }
-                    }
-                }
-            }
-
-            FlowRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                if (lesson.mode.hasTest) InfoBadge(
-                    icon = Icons.Default.Timer,
-                    text = "${lesson.testTimerSeconds / 60} daq test",
-                    color = themeColor
+                Text(
+                    "%02d".format(index + 1),
+                    style = MaterialTheme.typography.displaySmall,
+                    color = Color.White.copy(alpha = 0.18f),
+                    modifier = Modifier.align(Alignment.BottomEnd)
                 )
-                if (lesson.mode.hasSlides) {
-                    InfoBadge(
-                        icon = Icons.AutoMirrored.Filled.MenuBook,
-                        text = "${lesson.slideTimerSeconds / 60} daq dars",
-                        color = themeColor
-                    )
+            }
+        }
+        Column(Modifier.padding(start = 18.dp, end = 14.dp, top = 14.dp, bottom = 14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(lesson.title, style = MaterialTheme.typography.titleLarge, color = Signal.Ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (hasError) {
+                Text(
+                    if (!presentationExists) "Taqdimot fayli yo'q: ${File(lesson.presentationPath).name}" else "Test fayli yo'q: ${File(lesson.testPath).name}",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Signal.Danger,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                if (lesson.mode.hasSlides) Meta(Icons.Outlined.Slideshow, "${lesson.slideTimerSeconds / 60} daq dars")
+                if (lesson.mode.hasTest) Meta(Icons.Outlined.Quiz, "${lesson.testTimerSeconds / 60} daq test")
+            }
+            if (isTeacher) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Biriktirish →", style = MaterialTheme.typography.labelMedium, color = Signal.Primary)
+                    Spacer(Modifier.weight(1f))
+                    SignalIconButton(Icons.Default.Edit, "Tahrirlash", onEdit, size = 32.dp, iconSize = 15.dp)
+                    Spacer(Modifier.width(6.dp))
+                    SignalIconButton(Icons.Default.Delete, "O'chirish", onDelete, tint = Signal.Danger, size = 32.dp, iconSize = 15.dp)
                 }
             }
         }
@@ -245,19 +250,30 @@ fun LessonCard(
 }
 
 @Composable
-fun InfoBadge(icon: ImageVector, text: String, color: Color) {
+fun Meta(icon: androidx.compose.ui.graphics.vector.ImageVector, text: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Icon(icon, contentDescription = null, tint = Signal.Muted, modifier = Modifier.size(14.dp))
+        Text(text, style = MaterialTheme.typography.bodySmall, color = Signal.Muted)
+    }
+}
+
+/** Dashed "add new" tile at the end of a grid. */
+@Composable
+fun AddCard(title: String, text: String, onClick: () -> Unit) {
     Surface(
-        color = color.copy(alpha = 0.1f),
-        shape = CircleShape,
-        border = BorderStroke(1.dp, color.copy(alpha = 0.3f))
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().heightIn(min = 240.dp),
+        shape = AppDesign.CardShape,
+        color = Signal.Card,
+        border = androidx.compose.foundation.BorderStroke(2.dp, Signal.OutlineStrong)
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(16.dp))
-            Spacer(Modifier.width(6.dp))
-            Text(text = text, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = color)
+        Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            Surface(shape = AppDesign.CardShape, color = Signal.Container) {
+                Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) { Icon(Icons.Default.Add, contentDescription = null, tint = Signal.Primary) }
+            }
+            Spacer(Modifier.height(10.dp))
+            Text(title, style = MaterialTheme.typography.titleMedium, color = Signal.Primary)
+            Text(text, style = MaterialTheme.typography.bodySmall, color = Signal.Muted, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.widthIn(max = 240.dp))
         }
     }
 }

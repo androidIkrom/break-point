@@ -1,40 +1,34 @@
 package com.example.poststudy.presentation.ui.screens.groups
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.poststudy.di.AppContainer
 import com.example.poststudy.domain.model.GroupOverview
 import com.example.poststudy.domain.model.Student
 import com.example.poststudy.presentation.theme.AppDesign
-import com.example.poststudy.presentation.ui.components.BackButton
-import com.example.poststudy.presentation.ui.screens.admin.EmptyState
-import com.example.poststudy.presentation.ui.screens.admin.SelectionCard
-import com.example.poststudy.presentation.ui.components.hoverEffect
-import com.example.poststudy.presentation.ui.components.PostStudyDialog
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.text.style.TextOverflow
+import com.example.poststudy.presentation.theme.Signal
+import com.example.poststudy.presentation.theme.Space
+import com.example.poststudy.presentation.ui.components.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
-private val HeaderGreen = Color(0xFF065F46)
 
 /** Loading / error / content state for lists fetched from the admin computer. */
 private sealed interface RemoteState<out T> {
@@ -42,6 +36,8 @@ private sealed interface RemoteState<out T> {
     data class Failed(val message: String) : RemoteState<Nothing>
     data class Loaded<T>(val data: T) : RemoteState<T>
 }
+
+val StudentSteps = listOf("Guruh", "Ism", "Brifing", "Mashg'ulot")
 
 /**
  * Student picks their group. [loadGroups] talks either to the admin computer or to the local
@@ -84,9 +80,11 @@ fun GroupSelectionScreen(
 
     LaunchedEffect(Unit) { load() }
 
-    SelectionScaffold(
+    StudentFlowScaffold(
+        eyebrow = "Bilim testi",
         title = "Guruhingizni tanlang",
-        subtitle = sourceLabel,
+        subtitle = "$sourceLabel. Har bir guruh o'z mashg'ulotini oladi.",
+        step = 0,
         onBack = onBack,
         onRefresh = ::load
     ) {
@@ -94,17 +92,19 @@ fun GroupSelectionScreen(
             RemoteState.Loading -> LoadingBox()
             is RemoteState.Failed -> ErrorBox(s.message, onRetry = ::load)
             is RemoteState.Loaded -> if (s.data.isEmpty()) {
-                EmptyState("Guruhlar yo'q. Admin 'Guruhlar' bo'limida guruh qo'shishi kerak.")
+                EmptyBox(Icons.Default.Groups, "Guruhlar yo'q", "Admin 'Guruhlar' bo'limida guruh qo'shishi kerak.")
             } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize().widthIn(max = 900.dp),
-                    contentPadding = PaddingValues(24.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(300.dp),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = Space.page, vertical = Space.xl),
+                    horizontalArrangement = Arrangement.spacedBy(Space.l),
+                    verticalArrangement = Arrangement.spacedBy(Space.l)
                 ) {
                     itemsIndexed(s.data, key = { _, g -> g.id }) { index, group ->
                         StudentGroupCard(
                             group = group,
-                            color = AppDesign.RainbowPalette[index % AppDesign.RainbowPalette.size],
+                            index = index,
                             onClick = {
                                 if (group.isLocked) lockedGroup = group else onGroupSelected(group, "")
                             }
@@ -117,50 +117,45 @@ fun GroupSelectionScreen(
 }
 
 @Composable
-private fun StudentGroupCard(group: GroupOverview, color: Color, onClick: () -> Unit) {
+private fun StudentGroupCard(group: GroupOverview, index: Int, onClick: () -> Unit) {
     val enabled = group.isAssigned
-    val accent = if (enabled) color else Color(0xFF94A3B8)
-    Surface(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = Modifier.fillMaxWidth().then(if (enabled) Modifier.hoverEffect(scale = 1.02f, yOffset = -4f) else Modifier),
-        shape = AppDesign.CardShape,
-        color = if (enabled) Color.White else Color(0xFFF8FAFC),
-        border = BorderStroke(3.dp, accent.copy(alpha = 0.5f)),
-        shadowElevation = if (enabled) 6.dp else 0.dp
+    val brush = listOf(Signal.GradientPrimary, Signal.GradientCyanAmber, Signal.GradientAmberPrimary)[index % 3]
+    SignalCard(
+        modifier = Modifier.fillMaxWidth().heightIn(min = 170.dp),
+        onClick = if (enabled) onClick else null,
+        color = if (enabled) Signal.Card else Signal.Surface,
+        padding = 20.dp
     ) {
-        Row(Modifier.padding(24.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier.size(56.dp).background(accent.copy(alpha = 0.12f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Default.Groups, contentDescription = null, tint = accent, modifier = Modifier.size(28.dp))
-            }
-            Spacer(Modifier.width(20.dp))
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(group.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = accent)
-                    if (group.isLocked) {
-                        Spacer(Modifier.width(8.dp))
-                        Icon(Icons.Default.Lock, contentDescription = "Parolli", tint = accent, modifier = Modifier.size(18.dp))
-                    }
-                }
-                Text(group.subjectName, style = MaterialTheme.typography.bodyMedium, color = Color(0xFF64748B))
-            }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             if (enabled) {
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        group.assignmentTitle.orEmpty(),
-                        fontWeight = FontWeight.Black,
-                        color = Color(0xFF1E293B),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.widthIn(max = 280.dp)
-                    )
-                    Text(assignmentLabel(group.kind!!, group.mode), color = color, fontWeight = FontWeight.Bold)
+                GradientTile(brush, size = 44.dp) {
+                    Text(group.name.filter { it.isDigit() }.take(2).ifBlank { group.name.take(1) }, style = MaterialTheme.typography.titleMedium, color = Color.White)
                 }
             } else {
-                Text("Hali mashg'ulot biriktirilmagan", color = Color(0xFF94A3B8), fontWeight = FontWeight.Bold)
+                Box(Modifier.size(44.dp).padding(2.dp), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Groups, contentDescription = null, tint = Signal.Faint)
+                }
+            }
+            Column {
+                Text(group.name, style = MaterialTheme.typography.titleLarge, color = if (enabled) Signal.Ink else Signal.Muted)
+                Text(group.subjectName, style = MaterialTheme.typography.bodySmall, color = Signal.Muted)
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        if (enabled) {
+            Text(group.assignmentTitle.orEmpty(), style = MaterialTheme.typography.titleSmall, color = Signal.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(assignmentLabel(group.kind!!, group.mode), style = MaterialTheme.typography.bodySmall, color = Signal.Muted)
+        } else {
+            Text("Hali mashg'ulot biriktirilmagan", style = MaterialTheme.typography.bodyMedium, color = Signal.Faint)
+        }
+        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.height(12.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Icon(if (group.isLocked) Icons.Default.Lock else Icons.Default.LockOpen, contentDescription = if (group.isLocked) "Parolli" else null, tint = Signal.Muted, modifier = Modifier.size(14.dp))
+            Text(if (group.isLocked) "Parol bilan" else "Parolsiz", style = MaterialTheme.typography.labelMedium, color = Signal.Muted)
+            if (enabled) {
+                Spacer(Modifier.weight(1f))
+                Text("Kirish →", style = MaterialTheme.typography.labelMedium, color = Signal.Primary)
             }
         }
     }
@@ -180,7 +175,7 @@ private fun GroupPasswordPrompt(
     var isChecking by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val focusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    LaunchedEffect(Unit) { runCatching { focusRequester.requestFocus() } }
 
     val submit: () -> Unit = {
         if (!isChecking && password.isNotEmpty()) {
@@ -202,7 +197,7 @@ private fun GroupPasswordPrompt(
 
     PostStudyDialog(
         onDismissRequest = onDismiss,
-        title = "'${group.name}' guruhi",
+        title = "${group.name} guruhi",
         text = "Guruhga kirish uchun o'qituvchi bergan parolni kiriting.",
         confirmText = if (isChecking) "Tekshirilmoqda..." else "Kirish",
         onConfirm = submit,
@@ -226,15 +221,10 @@ private fun GroupPasswordPrompt(
                     enabled = !isChecking,
                     isError = error != null,
                     modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
-                    shape = AppDesign.ComponentShape
+                    shape = AppDesign.SmallShape
                 )
                 error?.let {
-                    Text(
-                        it,
-                        color = Color(0xFFB91C1C),
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
+                    Text(it, color = Signal.Danger, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
                 }
             }
         }
@@ -292,55 +282,41 @@ fun StudentSelectionScreen(
         )
     }
 
-    SelectionScaffold(
-        title = "Ismingizni tanlang",
-        subtitle = "${group.subjectName} • ${group.name} • ${group.assignmentTitle.orEmpty()}",
+    StudentFlowScaffold(
+        eyebrow = group.name,
+        title = "Kim siz?",
+        subtitle = "${group.subjectName} · ${group.assignmentTitle.orEmpty()}. Ro'yxatdan ismingizni tanlang yoki yangi ism kiriting.",
+        step = 1,
         onBack = onBack,
         onRefresh = ::load
     ) {
-        Column(
-            modifier = Modifier.fillMaxSize().widthIn(max = 900.dp).padding(horizontal = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
+        Column(Modifier.fillMaxSize().padding(horizontal = Space.page)) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = Space.xl),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 OutlinedTextField(
                     value = query,
                     onValueChange = { query = it },
-                    label = { Text("Ism bo'yicha qidirish") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    placeholder = { Text("Ism bo'yicha qidirish") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Signal.Muted) },
                     singleLine = true,
-                    modifier = Modifier.weight(1f),
-                    shape = AppDesign.ComponentShape
+                    modifier = Modifier.weight(1f).widthIn(max = 480.dp),
+                    shape = AppDesign.SmallShape
                 )
-                Button(
+                SignalButton(
+                    text = if (isCreating) "Qo'shilmoqda..." else "Ro'yxatda yo'qman",
                     onClick = { showAddDialog = true },
                     enabled = !isCreating,
-                    modifier = Modifier.height(56.dp),
-                    shape = AppDesign.ComponentShape,
-                    colors = ButtonDefaults.buttonColors(containerColor = AppDesign.Indigo)
-                ) {
-                    if (isCreating) {
-                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(20.dp))
-                    } else {
-                        Icon(Icons.Default.PersonAdd, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Ro'yxatda yo'qman", fontWeight = FontWeight.Bold)
-                    }
-                }
+                    icon = Icons.Default.PersonAdd,
+                    style = ButtonStyle.Primary,
+                    height = 48.dp
+                )
             }
 
             createError?.let {
-                Text(
-                    it,
-                    color = Color(0xFFB91C1C),
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = 12.dp)
-                )
+                Text(it, color = Signal.Danger, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 12.dp))
             }
 
             Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -350,23 +326,30 @@ fun StudentSelectionScreen(
                     is RemoteState.Loaded -> {
                         val filtered = s.data.filter { it.name.contains(query.trim(), ignoreCase = true) }
                         if (filtered.isEmpty()) {
-                            EmptyState(
-                                if (s.data.isEmpty()) "Guruhda hali tinglovchilar yo'q. 'Ro'yxatda yo'qman' tugmasini bosing."
-                                else "Bunday ism topilmadi."
+                            EmptyBox(
+                                Icons.Default.PersonSearch,
+                                if (s.data.isEmpty()) "Guruhda hali tinglovchilar yo'q" else "Bunday ism topilmadi",
+                                if (s.data.isEmpty()) "'Ro'yxatda yo'qman' tugmasini bosing." else "Qidiruvni o'zgartiring yoki yangi ism qo'shing."
                             )
                         } else {
-                            LazyColumn(
+                            LazyVerticalGrid(
+                                columns = GridCells.Adaptive(260.dp),
                                 modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(vertical = 24.dp),
-                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                                contentPadding = PaddingValues(vertical = Space.xl),
+                                horizontalArrangement = Arrangement.spacedBy(Space.m),
+                                verticalArrangement = Arrangement.spacedBy(Space.m)
                             ) {
-                                itemsIndexed(filtered, key = { _, st -> st.id }) { index, student ->
-                                    SelectionCard(
-                                        title = student.name,
-                                        subtitle = "Bu menman",
-                                        icon = Icons.Default.Person,
-                                        color = AppDesign.RainbowPalette[index % AppDesign.RainbowPalette.size]
-                                    ) { onStudentSelected(student) }
+                                itemsIndexed(filtered, key = { _, st -> st.id }) { _, student ->
+                                    SignalCard(modifier = Modifier.fillMaxWidth(), onClick = { onStudentSelected(student) }, padding = 14.dp) {
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                            InitialsAvatar(student.name, size = 40.dp)
+                                            Column(Modifier.weight(1f)) {
+                                                Text(student.name, style = MaterialTheme.typography.titleSmall, color = Signal.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                Text("Bu menman", style = MaterialTheme.typography.bodySmall, color = Signal.Muted)
+                                            }
+                                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Signal.Faint)
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -377,84 +360,76 @@ fun StudentSelectionScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * Light workspace with a dark signal band on top carrying the title and the four-step header.
+ */
 @Composable
-private fun SelectionScaffold(
+fun StudentFlowScaffold(
+    eyebrow: String,
     title: String,
     subtitle: String,
+    step: Int,
     onBack: () -> Unit,
-    onRefresh: () -> Unit,
+    onRefresh: (() -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AppDesign.BackgroundGradient)
-    ) {
-        Scaffold(
-            containerColor = Color.Transparent,
-            topBar = {
-                TopAppBar(
-                    title = {
-                        Column {
-                            Text(title, color = HeaderGreen, fontWeight = FontWeight.Black)
-                            Text(
-                                subtitle,
-                                style = MaterialTheme.typography.labelMedium,
-                                color = HeaderGreen.copy(alpha = 0.7f)
-                            )
-                        }
-                    },
-                    navigationIcon = {
-                        BackButton(onClick = onBack)
-                    },
-                    actions = {
-                        IconButton(onClick = onRefresh, modifier = Modifier.padding(end = 16.dp)) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Yangilash", tint = AppDesign.Emerald)
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-                )
+    Column(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxWidth().height(200.dp)) {
+            SignalBackground(alpha = 0.85f)
+            Column(Modifier.fillMaxSize().padding(horizontal = Space.page, vertical = 16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    BackButton(onClick = onBack, onDark = true, modifier = Modifier.padding(start = 0.dp))
+                    Spacer(Modifier.weight(1f))
+                    StepHeader(StudentSteps, step, onDark = true)
+                    if (onRefresh != null) {
+                        Spacer(Modifier.width(16.dp))
+                        SignalIconButton(Icons.Outlined.Refresh, "Yangilash", onRefresh, tint = Signal.OnDark, container = Signal.GlassFill, borderColor = Signal.GlassBorderStrong, size = 40.dp, iconSize = 18.dp, onDark = true)
+                    }
+                }
+                Spacer(Modifier.weight(1f))
+                Eyebrow(eyebrow, color = Signal.Amber)
+                Text(title, style = MaterialTheme.typography.displaySmall, color = Signal.OnDark)
+                Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = Signal.OnDarkMuted, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
-        ) { paddingValues ->
-            Box(
-                modifier = Modifier.fillMaxSize().padding(paddingValues),
-                contentAlignment = Alignment.TopCenter
-            ) {
-                content()
-            }
+        }
+        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+            Box(Modifier.widthIn(max = Space.contentMaxWidth + Space.page * 2).fillMaxSize()) { content() }
         }
     }
 }
 
 @Composable
-private fun LoadingBox() {
+fun LoadingBox() {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        CircularProgressIndicator(color = AppDesign.Indigo)
+        CircularProgressIndicator(color = Signal.Primary, trackColor = Signal.Container)
     }
 }
 
 @Composable
-private fun ErrorBox(message: String, onRetry: () -> Unit) {
+fun ErrorBox(message: String, onRetry: () -> Unit) {
     Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Default.WifiOff, contentDescription = null, tint = Color(0xFFEF4444), modifier = Modifier.size(64.dp))
+            Icon(Icons.Default.WifiOff, contentDescription = null, tint = Signal.Danger, modifier = Modifier.size(56.dp))
             Spacer(Modifier.height(16.dp))
-            Text(
-                message,
-                color = Color(0xFF7F1D1D),
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.widthIn(max = 600.dp)
-            )
-            Spacer(Modifier.height(24.dp))
-            Button(
-                onClick = onRetry,
-                shape = AppDesign.ComponentShape,
-                colors = ButtonDefaults.buttonColors(containerColor = AppDesign.Indigo)
-            ) {
-                Text("Qayta urinish", fontWeight = FontWeight.Bold)
+            Text(message, color = Signal.OnDangerContainer, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center, modifier = Modifier.widthIn(max = 600.dp))
+            Spacer(Modifier.height(20.dp))
+            SignalButton("Qayta urinish", onClick = onRetry, icon = Icons.Outlined.Refresh)
+        }
+    }
+}
+
+@Composable
+fun EmptyBox(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, text: String, action: (@Composable () -> Unit)? = null) {
+    Box(Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(Modifier.size(56.dp).padding(2.dp), contentAlignment = Alignment.Center) {
+                Surface(shape = AppDesign.ComponentShape, color = Signal.SurfaceContainer) {
+                    Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) { Icon(icon, contentDescription = null, tint = Signal.Muted, modifier = Modifier.size(26.dp)) }
+                }
             }
+            Text(title, style = MaterialTheme.typography.titleLarge, color = Signal.Ink, textAlign = TextAlign.Center)
+            Text(text, style = MaterialTheme.typography.bodyMedium, color = Signal.Muted, textAlign = TextAlign.Center, modifier = Modifier.widthIn(max = 420.dp))
+            if (action != null) { Spacer(Modifier.height(8.dp)); action() }
         }
     }
 }

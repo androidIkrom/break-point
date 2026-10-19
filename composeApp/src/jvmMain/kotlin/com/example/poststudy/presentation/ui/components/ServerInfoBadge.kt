@@ -2,7 +2,6 @@ package com.example.poststudy.presentation.ui.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -15,12 +14,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.poststudy.data.network.NetworkManager
 import com.example.poststudy.di.AppContainer
+import com.example.poststudy.presentation.theme.AppDesign
+import com.example.poststudy.presentation.theme.Signal
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 /** Shows the admin's LAN address(es) that students must type, plus server problems. */
 @Composable
-fun ServerInfoBadge(modifier: Modifier = Modifier) {
+fun ServerInfoBadge(modifier: Modifier = Modifier, onDark: Boolean = false) {
     var addresses by remember { mutableStateOf<List<String>?>(null) }
     LaunchedEffect(Unit) {
         addresses = withContext(Dispatchers.IO) { AppContainer.networkRepository.getLocalIpAddresses() }
@@ -33,17 +34,18 @@ fun ServerInfoBadge(modifier: Modifier = Modifier) {
         ?.takeIf { it != NetworkManager.DEFAULT_PORT }
         ?.let { ":$it" }
         .orEmpty()
+    val muted = if (onDark) Signal.OnDarkMuted else Signal.Muted
     val color = when {
-        serverError != null -> Color(0xFFEF4444)
-        !running -> Color(0xFF94A3B8)
-        else -> Color(0xFF6366F1)
+        serverError != null -> if (onDark) Signal.DangerOnDark else Signal.Danger
+        !running -> muted
+        else -> if (onDark) Signal.Cyan else Signal.Primary
     }
 
-    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(modifier = modifier, horizontalAlignment = Alignment.Start) {
         Surface(
-            color = color.copy(alpha = 0.1f),
-            shape = RoundedCornerShape(12.dp),
-            border = BorderStroke(1.dp, color.copy(alpha = 0.3f))
+            color = if (onDark) Color.White.copy(alpha = 0.08f) else Signal.Container,
+            shape = AppDesign.PillShape,
+            border = BorderStroke(1.dp, if (onDark) Color.White.copy(alpha = 0.16f) else Signal.CyanSoft)
         ) {
             val list = addresses
             val text = when {
@@ -53,7 +55,7 @@ fun ServerInfoBadge(modifier: Modifier = Modifier) {
             }
             Text(
                 text = text,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = color
@@ -63,8 +65,8 @@ fun ServerInfoBadge(modifier: Modifier = Modifier) {
         if (others.isNotEmpty()) {
             Text(
                 text = "Boshqa manzillar: ${others.joinToString(", ") { it + portSuffix }}",
-                style = MaterialTheme.typography.labelMedium,
-                color = Color(0xFF64748B),
+                style = MaterialTheme.typography.bodySmall,
+                color = muted,
                 modifier = Modifier.padding(top = 4.dp)
             )
         }
@@ -72,8 +74,7 @@ fun ServerInfoBadge(modifier: Modifier = Modifier) {
             Text(
                 text = "Tarmoq o'chiq — admin bosh sahifasidan yoqing",
                 style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF64748B),
+                color = muted,
                 modifier = Modifier.padding(top = 4.dp)
             )
         }
@@ -81,12 +82,10 @@ fun ServerInfoBadge(modifier: Modifier = Modifier) {
             Text(
                 text = "Tarmoq serveri ishlamayapti: $serverError",
                 style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFFB91C1C),
-                textAlign = TextAlign.Center,
+                color = color,
+                textAlign = TextAlign.Start,
                 modifier = Modifier.padding(top = 4.dp)
             )
         }
     }
 }
-

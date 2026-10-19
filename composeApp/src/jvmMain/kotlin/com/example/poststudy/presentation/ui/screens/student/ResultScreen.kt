@@ -1,29 +1,39 @@
 package com.example.poststudy.presentation.ui.screens.student
 
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material3.*
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.poststudy.presentation.ui.components.BackButton
+import com.example.poststudy.domain.model.GradedResult
 import com.example.poststudy.domain.model.Question
 import com.example.poststudy.presentation.theme.AppDesign
+import com.example.poststudy.presentation.theme.Signal
+import com.example.poststudy.presentation.theme.Space
+import com.example.poststudy.presentation.ui.components.*
 
 /** Delivery state of a network-mode result to the admin computer. */
 sealed interface SubmitStatus {
@@ -32,351 +42,232 @@ sealed interface SubmitStatus {
     data class Failed(val message: String) : SubmitStatus
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ResultScreen(
     questions: List<Question>,
     userAnswers: List<Int?>,
+    /** Null while the admin computer has not graded the answers yet. */
+    graded: GradedResult?,
     studentName: String,
     timeSpentSeconds: Int,
     submitStatus: SubmitStatus? = null,
     onRetrySubmit: () -> Unit = {},
     onFinish: () -> Unit
 ) {
-    val correctCount = questions.zip(userAnswers).count { (question, answer) ->
-        question.correctIndex == answer
-    }
-    val percentage =
-        if (questions.isNotEmpty()) (correctCount.toDouble() / questions.size * 100).toInt() else 0
     val focusRequester = remember { FocusRequester() }
+    val parallax = rememberParallax()
+    LaunchedEffect(Unit) { runCatching { focusRequester.requestFocus() } }
+
+    if (graded == null) {
+        PendingResult(studentName, timeSpentSeconds, submitStatus, onRetrySubmit, onFinish, focusRequester)
+        return
+    }
+
+    val correctCount = graded.correctAnswers
+    val percentage = if (graded.totalQuestions > 0) (correctCount.toDouble() / graded.totalQuestions * 100).toInt() else 0
 
     val scoreColor = when {
-        percentage >= 80 -> Color(0xFF10B981) // Emerald
-        percentage >= 60 -> Color(0xFFF59E0B) // Amber
-        else -> Color(0xFFEF4444) // Red
+        percentage >= 80 -> Signal.Cyan
+        percentage >= 60 -> Signal.Amber
+        else -> Signal.DangerOnDark
+    }
+    val (badgeText, badgeBg, badgeFg) = when {
+        percentage >= 80 -> Triple("A'lo daraja", Signal.Amber.copy(alpha = 0.2f), Signal.Amber)
+        percentage >= 60 -> Triple("Yaxshi daraja", Signal.Cyan.copy(alpha = 0.18f), Signal.Cyan)
+        else -> Triple("Qoniqarli", Color.White.copy(alpha = 0.1f), Signal.OnDarkMuted)
+    }
+    val title = when {
+        percentage >= 80 -> "A'lo natija!"
+        percentage >= 60 -> "Yaxshi natija"
+        else -> "Yana mashq qiling"
     }
 
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
+    val wrongQuestions = graded.wrongIndices.mapNotNull { index ->
+        questions.getOrNull(index)?.let { Triple(index, it, userAnswers.getOrNull(index)) }
     }
 
     Box(
-        modifier = Modifier.fillMaxSize().background(AppDesign.BackgroundGradient)
+        modifier = Modifier
+            .fillMaxSize()
+            .parallaxSource(parallax)
+            .focusRequester(focusRequester)
+            .onPreviewKeyEvent {
+                if (it.key == Key.Enter && it.type == KeyEventType.KeyDown) {
+                    onFinish(); true
+                } else false
+            }
     ) {
-        // Decorative background elements
-        Box(
-            modifier = Modifier.size(600.dp).offset(x = (-200).dp, y = (-200).dp)
-                .background(scoreColor.copy(alpha = 0.05f), CircleShape)
-        )
+        SignalBackground(parallax = parallax.value)
 
-        Scaffold(
-            containerColor = Color.Transparent,
-            modifier = Modifier.focusRequester(focusRequester).onPreviewKeyEvent {
-                    if (it.key == Key.Enter && it.type == KeyEventType.KeyDown) {
-                        onFinish()
-                        true
-                    } else false
-                },
-            topBar = {
-                val wrongCount =
-                    questions.zip(userAnswers).count { it.first.correctIndex != it.second }
-                CenterAlignedTopAppBar(
-                    title = {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            "Natijalar tahlili",
-                            fontWeight = FontWeight.Black,
-                            color = Color(0xFF1E293B)
-                        )
-                        Text(
-                            "Savollar: ${questions.size} | Javoblar: ${userAnswers.size} | Xatolar: $wrongCount",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.Gray
-                        )
-                    }
-                },
-                    navigationIcon = {
-                        BackButton(onClick = onFinish)
-                    },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
-                )
-            }) { paddingValues ->
-            // Use a single LazyColumn for the entire screen to ensure scrolling works perfectly
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(paddingValues)
-                    .padding(horizontal = 32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(20.dp),
-                contentPadding = PaddingValues(top = 24.dp, bottom = 48.dp)
-            ) {
-                // 1. Result Summary Card
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth().widthIn(max = 700.dp),
-                        shape = AppDesign.CardShape,
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 20.dp),
-                        border = BorderStroke(
-                            4.dp, scoreColor.copy(alpha = 0.4f)
-                        )
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(48.dp).fillMaxWidth(),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = "Sizning yakuniy natijangiz",
-                                style = MaterialTheme.typography.titleLarge,
-                                color = Color(0xFF64748B),
-                                fontWeight = FontWeight.Black
-                            )
-                            Text(
-                                text = studentName,
-                                style = MaterialTheme.typography.displayMedium,
-                                fontWeight = FontWeight.Black,
-                                color = Color(0xFF1E293B),
-                                modifier = Modifier.padding(vertical = 8.dp)
-                            )
-
-                            Spacer(modifier = Modifier.height(32.dp))
-
-                            Box(
-                                modifier = Modifier.size(220.dp)
-                                    .background(scoreColor.copy(alpha = 0.1f), CircleShape)
-                                    .border(6.dp, scoreColor, CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text(
-                                        text = "$percentage%",
-                                        style = MaterialTheme.typography.displayMedium,
-                                        fontWeight = FontWeight.Black,
-                                        color = scoreColor
-                                    )
-                                    Text(
-                                        text = "$correctCount / ${questions.size}",
-                                        style = MaterialTheme.typography.titleLarge,
-                                        fontWeight = FontWeight.Black,
-                                        color = scoreColor.copy(alpha = 0.8f)
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(48.dp))
-
-                            val timeMinutes = timeSpentSeconds / 60
-                            val timeSeconds = timeSpentSeconds % 60
-                            Surface(
-                                color = Color(0xFFF1F5F9),
-                                shape = CircleShape,
-                                border = BorderStroke(
-                                    2.dp, Color(0xFFE2E8F0)
-                                )
-                            ) {
-                                Text(
-                                    text = "Sarflangan vaqt: %d:%02d".format(
-                                        timeMinutes, timeSeconds
-                                    ),
-                                    modifier = Modifier.padding(
-                                        horizontal = 32.dp, vertical = 12.dp
-                                    ),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Black,
-                                    color = Color(0xFF475569)
-                                )
-                            }
-                        }
-                    }
-                }
-
-                if (submitStatus != null) {
-                    item {
-                        SubmitStatusBanner(submitStatus, onRetrySubmit)
-                    }
-                }
-
-                // 2. Analysis Section
-                val wrongQuestions = questions.mapIndexedNotNull { index, question ->
-                    val userAnswer = userAnswers.getOrNull(index)
-                    if (userAnswer != question.correctIndex) {
-                        Triple(index, question, userAnswer)
-                    } else null
-                }
-
-                if (wrongQuestions.isEmpty()) {
-                    item {
-                        Box(
-                            Modifier.fillMaxWidth().padding(48.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                "Barcha javoblar to'g'ri! Ajoyib natija!",
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Black,
-                                color = Color(0xFF10B981)
-                            )
-                        }
-                    }
-                } else {
-                    item {
-                        Text(
-                            "Xato javoblar tahlili:",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Black,
-                            color = Color(0xFFEF4444),
-                            modifier = Modifier.fillMaxWidth().widthIn(max = 900.dp)
-                                .padding(top = 20.dp)
-                        )
-                    }
-
-                    items(wrongQuestions) { triple ->
-                        val originalIndex = triple.first
-                        val question = triple.second
-                        val userAnswerIndex = triple.third
-
-                        Card(
-                            modifier = Modifier.fillMaxWidth().widthIn(max = 900.dp)
-                                .animateContentSize(),
-                            shape = AppDesign.CardShape,
-                            colors = CardDefaults.cardColors(containerColor = Color.White),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                            border = BorderStroke(
-                                3.dp, Color(0xFFEF4444).copy(alpha = 0.3f)
-                            )
-                        ) {
-                            Column(modifier = Modifier.padding(32.dp)) {
-                                Row(verticalAlignment = Alignment.Top) {
-                                    Surface(
-                                        color = Color(0xFFEF4444).copy(alpha = 0.1f),
-                                        shape = CircleShape,
-                                        modifier = Modifier.size(48.dp),
-                                        border = BorderStroke(
-                                            3.dp, Color(0xFFEF4444)
-                                        )
-                                    ) {
-                                        Box(contentAlignment = Alignment.Center) {
-                                            Text(
-                                                text = "${originalIndex + 1}",
-                                                style = MaterialTheme.typography.headlineSmall,
-                                                fontWeight = FontWeight.Black,
-                                                color = Color(0xFFEF4444)
-                                            )
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.width(24.dp))
-                                    Text(
-                                        text = question.text,
-                                        style = MaterialTheme.typography.titleLarge,
-                                        fontWeight = FontWeight.Black,
-                                        color = Color(0xFF1E293B)
-                                    )
-                                }
-
-                                Spacer(modifier = Modifier.height(32.dp))
-
-                                val userAnswerText =
-                                    userAnswerIndex?.let { question.options.getOrNull(it) }
-                                        ?: "O'tkazib yuborildi"
-
-                                ResultDetailBox(
-                                    label = "Sizning javobingiz",
-                                    text = userAnswerText,
-                                    color = Color(0xFFEF4444),
-                                    backgroundColor = Color(0xFFFFF1F2)
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // 3. Finish Button
-                item {
-                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        Button(
-                            onClick = onFinish,
-                            modifier = Modifier.padding(vertical = 32.dp).width(400.dp)
-                                .height(72.dp),
-                            shape = AppDesign.ComponentShape,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF10B981), contentColor = Color.White
-                            ),
-                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 12.dp)
-                        ) {
-                            Text(
-                                "TAYYOR",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Black
-                            )
-                        }
-                    }
-                }
+        Row(Modifier.fillMaxWidth().padding(horizontal = Space.page, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            BackButton(onClick = onFinish, onDark = true, modifier = Modifier.padding(start = 0.dp))
+            Column {
+                Text("Natijalar tahlili", style = MaterialTheme.typography.titleMedium, color = Signal.OnDark)
+                Text("Savollar: ${questions.size} · Javoblar: ${userAnswers.count { it != null }} · Xatolar: ${wrongQuestions.size}", style = MaterialTheme.typography.bodySmall, color = Signal.OnDarkMuted)
             }
         }
-    }
-}
 
-@Composable
-private fun SubmitStatusBanner(status: SubmitStatus, onRetry: () -> Unit) {
-    val (color, text) = when (status) {
-        SubmitStatus.Sending -> Color(0xFF6366F1) to "Natija adminga yuborilmoqda..."
-        SubmitStatus.Sent -> Color(0xFF10B981) to "Natija adminga yuborildi."
-        is SubmitStatus.Failed -> Color(0xFFEF4444) to "Natija adminga yuborilmadi: ${status.message}"
-    }
-    Surface(
-        modifier = Modifier.fillMaxWidth().widthIn(max = 700.dp),
-        color = color.copy(alpha = 0.08f),
-        shape = AppDesign.ComponentShape,
-        border = BorderStroke(2.dp, color.copy(alpha = 0.4f))
-    ) {
-        Row(
-            modifier = Modifier.padding(20.dp),
-            verticalAlignment = Alignment.CenterVertically
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(horizontal = Space.page),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            contentPadding = PaddingValues(top = 80.dp, bottom = 48.dp)
         ) {
-            if (status == SubmitStatus.Sending) {
-                CircularProgressIndicator(color = color, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                Spacer(Modifier.width(12.dp))
-            }
-            Text(
-                text,
-                modifier = Modifier.weight(1f),
-                color = color,
-                fontWeight = FontWeight.Bold
-            )
-            if (status is SubmitStatus.Failed) {
-                Spacer(Modifier.width(12.dp))
-                Button(
-                    onClick = onRetry,
-                    shape = AppDesign.ComponentShape,
-                    colors = ButtonDefaults.buttonColors(containerColor = color)
-                ) {
-                    Text("Qayta yuborish", fontWeight = FontWeight.Bold)
+            item {
+                Box(Modifier.widthIn(max = 840.dp).fillMaxWidth()) {
+                    GlassCard(Modifier.fillMaxWidth(), padding = 32.dp) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(32.dp)) {
+                            ScoreRing(percent = percentage, color = scoreColor, caption = "$correctCount / ${graded.totalQuestions} to'g'ri")
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                StatusChip(badgeText, container = badgeBg, contentColor = badgeFg, icon = Icons.Default.EmojiEvents)
+                                Text(title, style = MaterialTheme.typography.displaySmall, color = Signal.OnDark)
+                                Text(studentName, style = MaterialTheme.typography.bodyLarge, color = Signal.OnDarkMuted)
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    StatusChip("Vaqt %d:%02d".format(timeSpentSeconds / 60, timeSpentSeconds % 60), container = Color.White.copy(alpha = 0.1f), contentColor = Signal.OnDark)
+                                    if (submitStatus != null) SubmitChip(submitStatus)
+                                }
+                            }
+                        }
+                    }
+                    if (percentage >= 80) {
+                        ConfettiBurst(playKey = percentage, modifier = Modifier.matchParentSize(), origin = Offset(0.14f, 0.5f))
+                    }
                 }
+            }
+
+            if (submitStatus is SubmitStatus.Failed) {
+                item {
+                    Box(Modifier.widthIn(max = 840.dp).fillMaxWidth()) {
+                        Surface(shape = AppDesign.CardShape, color = Signal.Danger.copy(alpha = 0.18f), border = BorderStroke(1.dp, Signal.Danger.copy(alpha = 0.5f))) {
+                            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Text("Natija adminga yuborilmadi: ${submitStatus.message}", color = Signal.OnDark, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                                SignalButton("Qayta yuborish", onClick = onRetrySubmit, style = ButtonStyle.Cyan, icon = Icons.Default.Refresh, height = 40.dp)
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (wrongQuestions.isEmpty()) {
+                item {
+                    Box(Modifier.widthIn(max = 840.dp).fillMaxWidth()) {
+                        Surface(shape = AppDesign.CardShape, color = Signal.Success.copy(alpha = 0.22f), border = BorderStroke(1.dp, Signal.SuccessOnDark.copy(alpha = 0.4f))) {
+                            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Icon(Icons.Default.Check, contentDescription = null, tint = Signal.SuccessOnDark)
+                                Text("Barcha javoblar to'g'ri! Ajoyib natija!", color = Signal.OnDark, style = MaterialTheme.typography.titleMedium)
+                            }
+                        }
+                    }
+                }
+            } else {
+                item {
+                    Text(
+                        "Xato javoblar · ${wrongQuestions.size}",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Signal.OnDarkMuted,
+                        modifier = Modifier.widthIn(max = 840.dp).fillMaxWidth().padding(top = 8.dp)
+                    )
+                }
+                itemsIndexed(wrongQuestions) { _, triple ->
+                    val (originalIndex, question, userAnswerIndex) = triple
+                    Box(Modifier.widthIn(max = 840.dp).fillMaxWidth()) {
+                        GlassCard(Modifier.fillMaxWidth(), padding = 18.dp) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                                Box(Modifier.size(30.dp).background(Signal.Danger.copy(alpha = 0.35f), RoundedCornerShape(9.dp)), contentAlignment = Alignment.Center) {
+                                    Text("${originalIndex + 1}", style = MaterialTheme.typography.labelMedium, color = Color(0xFFFCA5A5))
+                                }
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text(question.text, style = MaterialTheme.typography.titleMedium, color = Signal.OnDark)
+                                    val userAnswerText = userAnswerIndex?.let { question.options.getOrNull(it) } ?: "O'tkazib yuborildi"
+                                    Row {
+                                        Text("Sizning javobingiz: ", style = MaterialTheme.typography.bodyMedium, color = Signal.OnDarkMuted)
+                                        Text(userAnswerText, style = MaterialTheme.typography.bodyMedium, color = Color(0xFFFCA5A5), fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
+                Row(Modifier.widthIn(max = 840.dp).fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
+                    SignalButton("Tayyor", onClick = onFinish, style = ButtonStyle.Cyan, height = 48.dp, contentPadding = PaddingValues(horizontal = 32.dp))
+                }
+                Text("Enter — tayyor", style = MaterialTheme.typography.bodySmall, color = Signal.OnDarkFaint, modifier = Modifier.padding(top = 8.dp))
+            }
+        }
+    }
+}
+
+/** Network mode before the admin computer answered: the answers are out, the score is not here yet. */
+@Composable
+private fun PendingResult(
+    studentName: String,
+    timeSpentSeconds: Int,
+    submitStatus: SubmitStatus?,
+    onRetrySubmit: () -> Unit,
+    onFinish: () -> Unit,
+    focusRequester: FocusRequester
+) {
+    val parallax = rememberParallax()
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .parallaxSource(parallax)
+            .focusRequester(focusRequester)
+            .onPreviewKeyEvent {
+                if (it.key == Key.Enter && it.type == KeyEventType.KeyDown) {
+                    onFinish(); true
+                } else false
+            }
+    ) {
+        SignalBackground(parallax = parallax.value)
+        Row(Modifier.fillMaxWidth().padding(horizontal = Space.page, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            BackButton(onClick = onFinish, onDark = true, modifier = Modifier.padding(start = 0.dp))
+            Text("Natija", style = MaterialTheme.typography.titleMedium, color = Signal.OnDark)
+        }
+        Column(Modifier.fillMaxSize().padding(horizontal = Space.page, vertical = 80.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            GlassCard(Modifier.widthIn(max = 840.dp).fillMaxWidth(), padding = 32.dp) {
+                Text("Javoblar yuborildi", style = MaterialTheme.typography.displaySmall, color = Signal.OnDark)
+                Text(studentName, style = MaterialTheme.typography.bodyLarge, color = Signal.OnDarkMuted)
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "Natijani admin kompyuteri hisoblaydi va saqlaydi. Javoblar bu kompyuterda baholanmaydi.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Signal.OnDarkMuted
+                )
+                Spacer(Modifier.height(14.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    StatusChip("Vaqt %d:%02d".format(timeSpentSeconds / 60, timeSpentSeconds % 60), container = Color.White.copy(alpha = 0.1f), contentColor = Signal.OnDark)
+                    if (submitStatus != null) SubmitChip(submitStatus)
+                }
+            }
+            if (submitStatus is SubmitStatus.Failed) {
+                Surface(modifier = Modifier.widthIn(max = 840.dp).fillMaxWidth(), shape = AppDesign.CardShape, color = Signal.Danger.copy(alpha = 0.18f), border = BorderStroke(1.dp, Signal.Danger.copy(alpha = 0.5f))) {
+                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("Javoblar adminga yetib bormadi: ${submitStatus.message}", color = Signal.OnDark, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                        SignalButton("Qayta yuborish", onClick = onRetrySubmit, style = ButtonStyle.Cyan, icon = Icons.Default.Refresh, height = 40.dp)
+                    }
+                }
+            }
+            Row(Modifier.widthIn(max = 840.dp).fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.End)) {
+                SignalButton("Tayyor", onClick = onFinish, style = ButtonStyle.Cyan, height = 48.dp, contentPadding = PaddingValues(horizontal = 32.dp))
             }
         }
     }
 }
 
 @Composable
-fun ResultDetailBox(label: String, text: String, color: Color, backgroundColor: Color) {
-    Surface(
-        color = backgroundColor,
-        shape = AppDesign.ComponentShape,
-        modifier = Modifier.fillMaxWidth(),
-        border = BorderStroke(2.dp, color.copy(alpha = 0.2f))
-    ) {
-        Row(modifier = Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = "$label: ",
-                style = MaterialTheme.typography.titleMedium,
-                color = Color(0xFF64748B),
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = text,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Black,
-                color = color
-            )
+private fun SubmitChip(status: SubmitStatus) {
+    when (status) {
+        SubmitStatus.Sending -> Surface(shape = AppDesign.PillShape, color = Color.White.copy(alpha = 0.1f)) {
+            Row(Modifier.height(26.dp).padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                CircularProgressIndicator(color = Signal.Cyan, modifier = Modifier.size(12.dp), strokeWidth = 2.dp)
+                Text("Javoblar adminga yuborilmoqda...", color = Signal.OnDark, style = MaterialTheme.typography.labelMedium)
+            }
         }
+        SubmitStatus.Sent -> GlassPill("Natija adminda saqlandi", live = true)
+        is SubmitStatus.Failed -> StatusChip("Yuborilmadi", container = Signal.Danger.copy(alpha = 0.3f), contentColor = Color(0xFFFCA5A5))
     }
 }

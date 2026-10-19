@@ -6,7 +6,9 @@ import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import org.jetbrains.exposed.sql.transactions.transaction
+import java.io.File
 import java.security.MessageDigest
+import java.sql.Connection
 
 /**
  * Mode stored by name, but tolerant to values this build does not know: other BreakPoint builds
@@ -80,6 +82,8 @@ object ExamRecordsTable : Table("exam_records_v5") {
     val groupId = integer("group_id").nullable()
     val studentId = integer("student_id").nullable()
     val subjectId = reference("subject_id", SubjectsTable).nullable()
+    /** Set by network submits so a retried request does not store the result twice. */
+    val submissionId = varchar("submission_id", 36).nullable()
     override val primaryKey = PrimaryKey(id)
 }
 
@@ -113,13 +117,25 @@ object AppMetaTable : Table("app_meta_v1") {
 
 object DatabaseHelper {
     fun init() {
-        val dbPath = System.getProperty("user.home") + "/.breakpoint/breakpoint_v2.db"
-        val dbFile = java.io.File(dbPath)
-        if (!dbFile.parentFile.exists()) {
-            dbFile.parentFile.mkdirs()
-        }
+        val dbFile = File(System.getProperty("user.home"), ".breakpoint/breakpoint_v2.db")
+        dbFile.parentFile.mkdirs()
+        val hadData = dbFile.isFile && dbFile.length() > 0
+        // Taken while the file is still closed, so the copy is consistent
+        DatabaseBackups.daily(dbFile)
 
-        Database.connect("jdbc:sqlite:$dbPath", "org.sqlite.JDBC")
+        Database.connect(
+            url = "jdbc:sqlite:${dbFile.path}",
+            driver = "org.sqlite.JDBC",
+            setupConnection = { connection ->
+                connection.createStatement().use { statement ->
+                    // WAL: the LAN server can read while the UI writes. busy_timeout: a second
+                    // writer waits up to 5 s instead of failing with "database is locked".
+                    statement.execute("PRAGMA journal_mode=WAL")
+                    statement.execute("PRAGMA busy_timeout=5000")
+                }
+            },
+            databaseConfig = DatabaseConfig { defaultIsolationLevel = Connection.TRANSACTION_SERIALIZABLE }
+        )
 
         transaction {
             SchemaUtils.createMissingTablesAndColumns(
@@ -128,8 +144,12 @@ object DatabaseHelper {
             )
             initializeDefaults()
         }
+        SchemaMigrations.apply(dbFile, hadData)
         importExternalMaterials()
     }
+
+    /** Where the database and its backups live; shown in the help screen. */
+    val dataFolder: File get() = File(System.getProperty("user.home"), ".breakpoint")
 
     /** Lessons/exams saved before files were copied still point at the teacher's originals. */
     private fun importExternalMaterials() {
@@ -493,6 +513,11 @@ object DatabaseHelper {
 
     fun saveExamRecord(record: ExamRecord) {
         transaction {
+            // A network submit retried after a lost reply arrives with the same submission id
+            val submission = record.submissionId
+            if (submission != null &&
+                ExamRecordsTable.selectAll().where { ExamRecordsTable.submissionId eq submission }.count() > 0
+            ) return@transaction
             ExamRecordsTable.insert {
                 it[studentName] = record.studentName
                 it[lessonTitle] = record.lessonTitle
@@ -505,6 +530,7 @@ object DatabaseHelper {
                 it[groupId] = record.groupId
                 it[studentId] = record.studentId
                 it[subjectId] = record.subjectId?.let { sId -> org.jetbrains.exposed.dao.id.EntityID(sId, SubjectsTable) }
+                it[submissionId] = record.submissionId
             }
         }
     }
@@ -529,7 +555,8 @@ object DatabaseHelper {
                 timestamp = row[ExamRecordsTable.timestamp],
                 groupId = row[ExamRecordsTable.groupId],
                 studentId = row[ExamRecordsTable.studentId],
-                subjectId = row[ExamRecordsTable.subjectId]?.value
+                subjectId = row[ExamRecordsTable.subjectId]?.value,
+                submissionId = row[ExamRecordsTable.submissionId]
             )
         }
     }
@@ -655,7 +682,10 @@ object DatabaseHelper {
         GroupsTable.update({ GroupsTable.id eq group.id }) { it[name] = group.name }
     }
 
+    /** Removes the group with its students and their results, like [deleteStudent] does per student. */
     fun deleteGroup(id: Int) = transaction {
+        val studentIds = StudentsTable.selectAll().where { StudentsTable.groupId eq id }.map { it[StudentsTable.id].value }
+        ExamRecordsTable.deleteWhere { (groupId eq id) or (studentId inList studentIds) }
         GroupAssignmentsTable.deleteWhere { groupId eq id }
         StudentsTable.deleteWhere { groupId eq id }
         GroupsTable.deleteWhere { GroupsTable.id eq id }
@@ -696,7 +726,8 @@ object DatabaseHelper {
                     timestamp = row[ExamRecordsTable.timestamp],
                     groupId = row[ExamRecordsTable.groupId],
                     studentId = row[ExamRecordsTable.studentId],
-                    subjectId = row[ExamRecordsTable.subjectId]?.value
+                    subjectId = row[ExamRecordsTable.subjectId]?.value,
+                submissionId = row[ExamRecordsTable.submissionId]
                 )
             }
     }
@@ -722,7 +753,8 @@ object DatabaseHelper {
                     timestamp = row[ExamRecordsTable.timestamp],
                     groupId = row[ExamRecordsTable.groupId],
                     studentId = row[ExamRecordsTable.studentId],
-                    subjectId = row[ExamRecordsTable.subjectId]?.value
+                    subjectId = row[ExamRecordsTable.subjectId]?.value,
+                submissionId = row[ExamRecordsTable.submissionId]
                 )
             }
     }

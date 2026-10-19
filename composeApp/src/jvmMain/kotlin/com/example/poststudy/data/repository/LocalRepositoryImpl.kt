@@ -4,8 +4,10 @@ import com.example.poststudy.data.local.AdminAccess
 import com.example.poststudy.data.local.DatabaseHelper
 import com.example.poststudy.domain.model.*
 import com.example.poststudy.domain.repository.LocalRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 
 private const val BACKGROUND_MODE_KEY = "background_mode"
 
@@ -14,7 +16,7 @@ class LocalRepositoryImpl : LocalRepository {
 
     override fun isUserRegistered(): Flow<Boolean> = flow {
         emit(DatabaseHelper.isUserRegistered())
-    }
+    }.flowOn(Dispatchers.IO)
 
     override fun registerUser(username: String, password: String, fullName: String) {
         DatabaseHelper.registerUser(username, password, fullName)
@@ -30,11 +32,11 @@ class LocalRepositoryImpl : LocalRepository {
 
     override fun validateUser(username: String, password: String): Flow<Boolean> = flow {
         emit(DatabaseHelper.validateUser(username, password))
-    }
+    }.flowOn(Dispatchers.IO)
 
     override fun validateUserPassword(password: String): Flow<Boolean> = flow {
         emit(DatabaseHelper.validateUserPassword(password))
-    }
+    }.flowOn(Dispatchers.IO)
 
     override fun clearAllUsers() {
         DatabaseHelper.clearAllUsers()
@@ -68,11 +70,11 @@ class LocalRepositoryImpl : LocalRepository {
     // Subjects
     override fun getAllSubjects(): Flow<List<Subject>> = flow {
         emit(DatabaseHelper.getAllSubjects())
-    }
+    }.flowOn(Dispatchers.IO)
 
     override fun addSubject(name: String): Flow<Int> = flow {
         emit(DatabaseHelper.addSubject(name))
-    }
+    }.flowOn(Dispatchers.IO)
 
     override fun updateSubject(subject: Subject) {
         DatabaseHelper.updateSubject(subject)
@@ -99,11 +101,11 @@ class LocalRepositoryImpl : LocalRepository {
 
     override fun getSettings(subjectId: Int): Flow<Settings> = flow {
         emit(DatabaseHelper.getSettings(subjectId))
-    }
+    }.flowOn(Dispatchers.IO)
 
     override fun getAllLessons(subjectId: Int): Flow<List<Lesson>> = flow {
         emit(DatabaseHelper.getAllLessons(subjectId))
-    }
+    }.flowOn(Dispatchers.IO)
 
     override fun addLesson(lesson: Lesson) {
         DatabaseHelper.addLesson(lesson)
@@ -119,7 +121,7 @@ class LocalRepositoryImpl : LocalRepository {
 
     override fun getAllExams(subjectId: Int): Flow<List<Exam>> = flow {
         emit(DatabaseHelper.getAllExams(subjectId))
-    }
+    }.flowOn(Dispatchers.IO)
 
     override fun addExam(exam: Exam) {
         DatabaseHelper.addExam(exam)
@@ -139,7 +141,7 @@ class LocalRepositoryImpl : LocalRepository {
 
     override fun getAllExamRecords(subjectId: Int?): Flow<List<ExamRecord>> = flow {
         emit(DatabaseHelper.getAllExamRecords(subjectId))
-    }
+    }.flowOn(Dispatchers.IO)
 
     override fun deleteExamRecord(id: Int) {
         DatabaseHelper.deleteExamRecord(id)
@@ -167,11 +169,11 @@ class LocalRepositoryImpl : LocalRepository {
 
     override fun getAllGroups(subjectId: Int): Flow<List<Group>> = flow {
         emit(DatabaseHelper.getAllGroups(subjectId))
-    }
+    }.flowOn(Dispatchers.IO)
 
     override fun addGroup(name: String, subjectId: Int, password: String): Flow<Int> = flow {
         emit(DatabaseHelper.addGroup(name, subjectId, password))
-    }
+    }.flowOn(Dispatchers.IO)
 
     override fun getGroupPassword(groupId: Int): String? = DatabaseHelper.getGroupPassword(groupId)
 
@@ -192,11 +194,11 @@ class LocalRepositoryImpl : LocalRepository {
 
     override fun getStudentsByGroup(groupId: Int): Flow<List<Student>> = flow {
         emit(DatabaseHelper.getStudentsByGroup(groupId))
-    }
+    }.flowOn(Dispatchers.IO)
 
     override fun addStudent(name: String, groupId: Int): Flow<Int> = flow {
         emit(DatabaseHelper.addStudent(name, groupId))
-    }
+    }.flowOn(Dispatchers.IO)
 
     override fun deleteStudent(id: Int) {
         DatabaseHelper.deleteStudent(id)
@@ -204,13 +206,13 @@ class LocalRepositoryImpl : LocalRepository {
 
     override fun getStudentRecords(studentId: Int): Flow<List<ExamRecord>> = flow {
         emit(DatabaseHelper.getStudentRecords(studentId))
-    }
+    }.flowOn(Dispatchers.IO)
 
     override fun getGroupRecords(groupId: Int, subjectId: Int?): Flow<List<ExamRecord>> = flow {
         emit(DatabaseHelper.getGroupRecords(groupId, subjectId))
-    }
+    }.flowOn(Dispatchers.IO)
 
     override fun getAllGroupsWithStats(subjectId: Int): Flow<List<Pair<Group, Int>>> = flow {
         emit(DatabaseHelper.getAllGroupsWithStats(subjectId))
-    }
+    }.flowOn(Dispatchers.IO)
 }

@@ -39,6 +39,8 @@ kotlin {
             implementation(libs.exposed.jdbc)
             implementation(libs.sqlite.jdbc)
             implementation(libs.gson)
+            // Reads the Windows "Animation effects" setting so motion can be turned off
+            implementation("net.java.dev.jna:jna-platform:5.15.0")
         }
     }
 }
@@ -53,7 +55,7 @@ compose.desktop {
             // Raise for every release sent to users: an MSI with the same version does not replace the installed one
             packageVersion = "1.1.1"
             vendor = "BreakPoint Vendor"
-            copyright = "© 2024 BreakPoint"
+            copyright = "© 2026 BreakPoint"
             description = "BreakPoint"
 
             // Checked with `./gradlew suggestRuntimeModules`; java.prefs is needed by the connect screen,

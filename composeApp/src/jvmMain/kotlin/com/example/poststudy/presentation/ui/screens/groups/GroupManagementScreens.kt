@@ -1,22 +1,27 @@
 package com.example.poststudy.presentation.ui.screens.groups
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.outlined.EventBusy
+import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.Key
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.LockOpen
+import androidx.compose.material.icons.outlined.PersonAdd
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.poststudy.di.AppContainer
@@ -25,20 +30,15 @@ import com.example.poststudy.domain.model.Group
 import com.example.poststudy.domain.model.GroupOverview
 import com.example.poststudy.domain.model.Student
 import com.example.poststudy.presentation.theme.AppDesign
-import com.example.poststudy.presentation.ui.components.BackButton
-import com.example.poststudy.presentation.ui.components.PasswordReveal
-import com.example.poststudy.presentation.ui.components.PostStudyDialog
-import com.example.poststudy.presentation.ui.components.hoverEffect
-import com.example.poststudy.presentation.ui.screens.admin.EmptyState
+import com.example.poststudy.presentation.theme.Signal
+import com.example.poststudy.presentation.theme.Space
+import com.example.poststudy.presentation.ui.components.*
+import com.example.poststudy.presentation.ui.screens.admin.AddCard
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private val DangerRed = Color(0xFFEF4444)
-private val HeaderGreen = Color(0xFF065F46)
-
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GroupManagementScreen(
     subjectId: Int,
@@ -91,9 +91,9 @@ fun GroupManagementScreen(
         PostStudyDialog(
             onDismissRequest = { groupToDelete = null },
             title = "Guruhni o'chirish",
-            text = "'${group.name}' guruhi va undagi barcha tinglovchilar o'chiriladi. Bu amalni qaytarib bo'lmaydi.",
+            text = "'${group.name}' guruhi, undagi barcha tinglovchilar va ularning natijalari o'chiriladi. Bu amalni qaytarib bo'lmaydi.",
             confirmText = "O'chirish",
-            confirmColor = DangerRed,
+            confirmColor = Signal.Danger,
             onConfirm = {
                 groupToDelete = null
                 scope.launch {
@@ -104,45 +104,72 @@ fun GroupManagementScreen(
         )
     }
 
-    ManagementScaffold(
-        title = "Guruhlar",
-        onBack = onBack,
-        onAdd = { showAddDialog = true },
-        addDescription = "Guruh qo'shish"
+    AdminPage(
+        title = "Guruhlar · ${groups.size}",
+        eyebrow = "Tinglovchilar",
+        subtitle = "Guruhni bosib tinglovchilar ro'yxatini oching",
+        actions = { SignalButton("Guruh qo'shish", onClick = { showAddDialog = true }, icon = Icons.Default.Add, style = ButtonStyle.Gradient, height = 42.dp) }
     ) {
         when {
-            isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = AppDesign.Violet)
-            }
-            groups.isEmpty() -> EmptyState("Guruhlar hali qo'shilmagan. Yuqoridagi + tugmasini bosing.")
+            isLoading -> LoadingBox()
+            groups.isEmpty() -> EmptyBox(
+                Icons.Outlined.Groups, "Guruhlar hali qo'shilmagan", "Guruh yarating, parol qo'ying va unga dars yoki imtihon biriktiring.",
+                action = { SignalButton("Birinchi guruhni qo'shish", onClick = { showAddDialog = true }, icon = Icons.Default.Add, style = ButtonStyle.Gradient) }
+            )
             else -> LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 360.dp),
-                modifier = Modifier.fillMaxSize().padding(horizontal = 32.dp),
-                horizontalArrangement = Arrangement.spacedBy(24.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp),
-                contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp)
+                columns = GridCells.Adaptive(minSize = 320.dp),
+                modifier = Modifier.fillMaxSize(),
+                horizontalArrangement = Arrangement.spacedBy(Space.l),
+                verticalArrangement = Arrangement.spacedBy(Space.l),
+                contentPadding = PaddingValues(horizontal = Space.page, vertical = Space.xl)
             ) {
                 itemsIndexed(groups, key = { _, g -> g.id }) { index, group ->
-                    ManagementCard(
-                        title = group.name,
-                        subtitle = (if (group.isAssigned) {
-                            "${group.assignmentTitle} • ${assignmentLabel(group.kind!!, group.mode)}"
-                        } else "Mashg'ulot biriktirilmagan") + if (group.isLocked) " • parolli" else " • PAROL YO'Q",
-                        icon = Icons.Default.Groups,
-                        color = AppDesign.RainbowPalette[index % AppDesign.RainbowPalette.size],
-                        onClick = { onGroupSelected(group.group) },
-                        onEdit = { groupToRename = group },
-                        onDelete = { groupToDelete = group }
-                    )
+                    GroupCard(group, index, onClick = { onGroupSelected(group.group) }, onEdit = { groupToRename = group }, onDelete = { groupToDelete = group })
+                }
+                itemsIndexed(listOf(Unit), key = { _, _ -> "add" }) { _, _ ->
+                    AddCard("Yangi guruh", "Nom va kirish paroli bilan", onClick = { showAddDialog = true })
                 }
             }
         }
     }
 }
 
+@Composable
+private fun GroupCard(group: GroupOverview, index: Int, onClick: () -> Unit, onEdit: () -> Unit, onDelete: () -> Unit) {
+    val brush = listOf(Signal.GradientPrimary, Signal.GradientCyanAmber, Signal.GradientAmberPrimary)[index % 3]
+    SignalCard(modifier = Modifier.fillMaxWidth().heightIn(min = 180.dp), onClick = onClick, padding = 18.dp, borderColor = if (group.isLocked) Signal.Outline else Signal.WarningBorder) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            GradientTile(brush, size = 44.dp) {
+                Text(group.name.filter { it.isDigit() }.take(2).ifBlank { group.name.take(1) }, style = MaterialTheme.typography.titleMedium, color = Color.White)
+            }
+            Column(Modifier.weight(1f)) {
+                Text(group.name, style = MaterialTheme.typography.titleLarge, color = Signal.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(group.subjectName, style = MaterialTheme.typography.bodySmall, color = Signal.Muted)
+            }
+            SignalIconButton(Icons.Default.Edit, "Tahrirlash", onEdit, size = 32.dp, iconSize = 15.dp)
+            SignalIconButton(Icons.Default.Delete, "O'chirish", onDelete, tint = Signal.Danger, size = 32.dp, iconSize = 15.dp)
+        }
+        Spacer(Modifier.height(14.dp))
+        Text(
+            if (group.isAssigned) group.assignmentTitle.orEmpty() else if (group.assignmentMissing) "Biriktirilgan mashg'ulot o'chirilgan" else "Mashg'ulot biriktirilmagan",
+            style = MaterialTheme.typography.titleSmall,
+            color = if (group.isAssigned) Signal.Ink else if (group.assignmentMissing) Signal.Danger else Signal.Muted,
+            maxLines = 1, overflow = TextOverflow.Ellipsis
+        )
+        if (group.isAssigned) Text(assignmentLabel(group.kind!!, group.mode), style = MaterialTheme.typography.bodySmall, color = Signal.Muted)
+        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.height(12.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (group.isLocked) StatusChip("Parolli", Signal.Container, Signal.OnContainer, icon = Icons.Outlined.Lock, iconTint = Signal.Primary)
+            else StatusChip("Parol yo'q", Signal.WarningContainer, Signal.OnWarningContainer, icon = Icons.Outlined.LockOpen, iconTint = Signal.Warning)
+            Spacer(Modifier.weight(1f))
+            Text("Tinglovchilar →", style = MaterialTheme.typography.labelMedium, color = Signal.Primary)
+        }
+    }
+}
+
 private data class StudentStats(val attempts: Int, val averagePercent: Int)
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StudentListScreen(
     group: Group,
@@ -233,7 +260,7 @@ fun StudentListScreen(
             title = "Tinglovchini o'chirish",
             text = "'${student.name}' va uning barcha natijalari o'chiriladi. Bu amalni qaytarib bo'lmaydi.",
             confirmText = "O'chirish",
-            confirmColor = DangerRed,
+            confirmColor = Signal.Danger,
             onConfirm = {
                 studentToDelete = null
                 scope.launch {
@@ -244,220 +271,79 @@ fun StudentListScreen(
         )
     }
 
-    ManagementScaffold(
+    AdminPage(
         title = group.name,
+        eyebrow = "Guruh",
+        subtitle = "${students.size} tinglovchi",
         onBack = onBack,
-        onAdd = { showAddDialog = true },
-        addDescription = "Tinglovchi qo'shish"
+        actions = { SignalButton("Tinglovchi qo'shish", onClick = { showAddDialog = true }, icon = Icons.Outlined.PersonAdd, style = ButtonStyle.Primary, height = 42.dp) }
     ) {
         // One scrolling grid: the header cards scroll away with the students on small screens
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 340.dp),
+            columns = GridCells.Adaptive(minSize = 300.dp),
             modifier = Modifier.fillMaxSize(),
-            horizontalArrangement = Arrangement.spacedBy(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            contentPadding = PaddingValues(start = 32.dp, end = 32.dp, top = 8.dp, bottom = 32.dp)
+            horizontalArrangement = Arrangement.spacedBy(Space.m),
+            verticalArrangement = Arrangement.spacedBy(Space.m),
+            contentPadding = PaddingValues(horizontal = Space.page, vertical = Space.xl)
         ) {
             item(span = { GridItemSpan(maxLineSpan) }) {
-                AssignmentHeroCard(overview = overview, onEdit = { showAssignmentDialog = true })
+                Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(Space.l)) {
+                    AssignmentHeroCard(overview = overview, onEdit = { showAssignmentDialog = true }, modifier = Modifier.weight(1.6f).fillMaxHeight())
+                    GroupPasswordCard(overview = overview, onEdit = { showPasswordDialog = true }, modifier = Modifier.weight(1f).fillMaxHeight())
+                }
             }
             item(span = { GridItemSpan(maxLineSpan) }) {
-                GroupPasswordCard(overview = overview, onEdit = { showPasswordDialog = true })
-            }
-            item(span = { GridItemSpan(maxLineSpan) }) {
-                Text(
-                    "Tinglovchilar (${students.size})",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Black,
-                    color = HeaderGreen,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
+                Text("Tinglovchilar · ${students.size}", style = MaterialTheme.typography.headlineSmall, color = Signal.Ink, modifier = Modifier.padding(top = 8.dp))
             }
             when {
                 isLoading -> item(span = { GridItemSpan(maxLineSpan) }) {
                     Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = AppDesign.Violet)
+                        CircularProgressIndicator(color = Signal.Primary, trackColor = Signal.Container)
                     }
                 }
                 students.isEmpty() -> item(span = { GridItemSpan(maxLineSpan) }) {
-                    Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
-                        Text(
-                            "Bu guruhda tinglovchilar yo'q. Ular tarmoq orqali ulanganda ham qo'shiladi.",
-                            color = Color(0xFF64748B)
-                        )
+                    SignalCard(padding = 20.dp) {
+                        Text("Bu guruhda tinglovchilar yo'q", style = MaterialTheme.typography.titleMedium, color = Signal.Ink)
+                        Text("Ular tarmoq orqali ulanganda avtomatik qo'shiladi yoki yuqoridagi tugma bilan qo'shing.", style = MaterialTheme.typography.bodySmall, color = Signal.Muted)
                     }
                 }
-                else -> itemsIndexed(students, key = { _, s -> s.first.id }) { index, (student, stats) ->
-                    ManagementCard(
-                        title = student.name,
-                        subtitle = if (stats.attempts == 0) "Hali test topshirmagan"
-                        else "${stats.attempts} ta urinish • o'rtacha ${stats.averagePercent}%",
-                        icon = Icons.Default.Person,
-                        color = AppDesign.RainbowPalette[index % AppDesign.RainbowPalette.size],
-                        onClick = null,
-                        onEdit = null,
-                        onDelete = { studentToDelete = student }
-                    )
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ManagementScaffold(
-    title: String,
-    onBack: () -> Unit,
-    onAdd: () -> Unit,
-    addDescription: String,
-    content: @Composable () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AppDesign.BackgroundGradient)
-    ) {
-        Scaffold(
-            containerColor = Color.Transparent,
-            topBar = {
-                TopAppBar(
-                    title = { Text(title, color = HeaderGreen, fontWeight = FontWeight.Black) },
-                    navigationIcon = {
-                        BackButton(onClick = onBack)
-                    },
-                    actions = {
-                        Button(
-                            onClick = onAdd,
-                            modifier = Modifier.padding(end = 16.dp),
-                            shape = AppDesign.ComponentShape,
-                            colors = ButtonDefaults.buttonColors(containerColor = AppDesign.Violet)
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text(addDescription, fontWeight = FontWeight.Bold)
+                else -> itemsIndexed(students, key = { _, s -> s.first.id }) { _, (student, stats) ->
+                    SignalCard(padding = 14.dp) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            InitialsAvatar(student.name, size = 40.dp)
+                            Column(Modifier.weight(1f)) {
+                                Text(student.name, style = MaterialTheme.typography.titleSmall, color = Signal.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(
+                                    if (stats.attempts == 0) "Hali test topshirmagan" else "${stats.attempts} ta urinish · o'rtacha ${stats.averagePercent}%",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (stats.attempts == 0) Signal.Muted else when { stats.averagePercent >= 80 -> Signal.Success; stats.averagePercent >= 60 -> Signal.Warning; else -> Signal.Danger }
+                                )
+                            }
+                            SignalIconButton(Icons.Default.Delete, "O'chirish", { studentToDelete = student }, tint = Signal.Danger, size = 32.dp, iconSize = 15.dp)
                         }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-                )
-            }
-        ) { paddingValues ->
-            Box(Modifier.fillMaxSize().padding(paddingValues)) {
-                content()
-            }
-        }
-    }
-}
-
-@Composable
-private fun ManagementCard(
-    title: String,
-    subtitle: String,
-    icon: ImageVector,
-    color: Color,
-    onClick: (() -> Unit)?,
-    onEdit: (() -> Unit)?,
-    onDelete: () -> Unit
-) {
-    val cardContent: @Composable () -> Unit = {
-        Row(
-            modifier = Modifier.padding(24.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Box(
-                modifier = Modifier.size(56.dp).background(color.copy(alpha = 0.12f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(28.dp))
-            }
-            Column(Modifier.weight(1f)) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Black,
-                    color = color,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = Color(0xFF64748B), maxLines = 2, overflow = TextOverflow.Ellipsis)
-            }
-            if (onEdit != null) {
-                IconButton(onClick = onEdit, modifier = Modifier.background(color.copy(alpha = 0.1f), CircleShape)) {
-                    Icon(Icons.Default.Edit, contentDescription = "Tahrirlash", tint = color)
+                    }
                 }
             }
-            IconButton(onClick = onDelete, modifier = Modifier.background(DangerRed.copy(alpha = 0.1f), CircleShape)) {
-                Icon(Icons.Default.Delete, contentDescription = "O'chirish", tint = DangerRed)
-            }
         }
-    }
-
-    val modifier = Modifier.fillMaxWidth().hoverEffect(scale = 1.02f, yOffset = -4f)
-    val border = BorderStroke(3.dp, color.copy(alpha = 0.5f))
-    if (onClick != null) {
-        Surface(
-            onClick = onClick,
-            modifier = modifier,
-            shape = AppDesign.CardShape,
-            color = Color.White,
-            border = border,
-            shadowElevation = 8.dp,
-            content = cardContent
-        )
-    } else {
-        Surface(
-            modifier = modifier,
-            shape = AppDesign.CardShape,
-            color = Color.White,
-            border = border,
-            shadowElevation = 8.dp,
-            content = cardContent
-        )
     }
 }
 
 @Composable
 private fun GroupPasswordCard(overview: GroupOverview?, onEdit: () -> Unit, modifier: Modifier = Modifier) {
     val locked = overview?.isLocked == true
-    val accent = if (locked) AppDesign.Violet else DangerRed
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = AppDesign.ComponentShape,
-        color = Color.White,
-        border = BorderStroke(2.dp, accent.copy(alpha = 0.4f)),
-        shadowElevation = 4.dp
-    ) {
-        Row(Modifier.padding(horizontal = 24.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                if (locked) Icons.Default.Lock else Icons.Default.LockOpen,
-                contentDescription = null,
-                tint = accent,
-                modifier = Modifier.size(28.dp)
-            )
-            Spacer(Modifier.width(16.dp))
-            Text("Guruh paroli:", fontWeight = FontWeight.Bold, color = Color(0xFF64748B))
-            Spacer(Modifier.width(12.dp))
-            PasswordReveal(overview?.password, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-            if (!locked && overview != null) {
-                Text(
-                    "Istalgan tinglovchi bu guruhga kira oladi",
-                    color = DangerRed,
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(end = 12.dp)
-                )
-            }
-            OutlinedButton(
-                onClick = onEdit,
-                enabled = overview != null,
-                shape = AppDesign.ComponentShape,
-                border = BorderStroke(2.dp, accent)
-            ) {
-                Icon(Icons.Default.Key, contentDescription = null, tint = accent)
-                Spacer(Modifier.width(8.dp))
-                Text(if (locked) "Parolni o'zgartirish" else "Parol qo'yish", color = accent, fontWeight = FontWeight.Bold)
-            }
+    SignalCard(modifier = modifier, padding = 18.dp, borderColor = if (locked || overview == null) Signal.Outline else Signal.WarningBorder, color = if (locked || overview == null) Signal.Card else Signal.WarningContainer.copy(alpha = 0.5f)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(if (locked) Icons.Outlined.Lock else Icons.Outlined.LockOpen, contentDescription = null, tint = if (locked) Signal.Primary else Signal.Warning, modifier = Modifier.size(22.dp))
+            Text("Guruh paroli", style = MaterialTheme.typography.titleMedium, color = Signal.Ink)
         }
+        Spacer(Modifier.height(10.dp))
+        PasswordReveal(overview?.password, style = MaterialTheme.typography.headlineSmall)
+        if (!locked && overview != null) {
+            Text("Istalgan tinglovchi bu guruhga kira oladi", style = MaterialTheme.typography.bodySmall, color = Signal.Warning)
+        }
+        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.height(12.dp))
+        SignalButton(if (locked) "Parolni o'zgartirish" else "Parol qo'yish", onClick = onEdit, enabled = overview != null, icon = Icons.Outlined.Key, style = if (locked) ButtonStyle.Outlined else ButtonStyle.Primary, height = 40.dp)
     }
 }
 
@@ -465,38 +351,19 @@ private fun GroupPasswordCard(overview: GroupOverview?, onEdit: () -> Unit, modi
 @Composable
 private fun AssignmentHeroCard(overview: GroupOverview?, onEdit: () -> Unit, modifier: Modifier = Modifier) {
     val assigned = overview?.isAssigned == true
-    val accent = when {
-        overview == null -> Color(0xFF94A3B8)
-        !assigned -> Color(0xFFF59E0B)
-        overview.kind == AssignmentKind.Exam -> AppDesign.Indigo
-        else -> AppDesign.Emerald
-    }
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = AppDesign.CardShape,
-        color = Color.White,
-        border = BorderStroke(4.dp, accent.copy(alpha = 0.6f)),
-        shadowElevation = 10.dp
-    ) {
-        Row(Modifier.padding(32.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier.size(88.dp).background(accent.copy(alpha = 0.12f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    if (assigned) kindIcon(overview!!.kind!!) else Icons.Default.EventBusy,
-                    contentDescription = null,
-                    tint = accent,
-                    modifier = Modifier.size(44.dp)
-                )
+    SignalCard(modifier = modifier, padding = 0.dp) {
+        LessonCover(if (overview?.kind == AssignmentKind.Exam) 1 else 0, Modifier.fillMaxWidth().height(80.dp), amber = overview?.kind == AssignmentKind.Exam, danger = overview?.assignmentMissing == true) {
+            Box(Modifier.fillMaxSize().padding(12.dp)) {
+                StatusChip("Hozir biriktirilgan mashg'ulot", Color.White.copy(alpha = 0.14f), Color.White)
             }
-            Spacer(Modifier.width(28.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    "Hozir biriktirilgan mashg'ulot",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = Color(0xFF64748B),
-                    fontWeight = FontWeight.Bold
+        }
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Icon(
+                    if (assigned) kindIcon(overview!!.kind!!) else Icons.Outlined.EventBusy,
+                    contentDescription = null,
+                    tint = if (assigned) Signal.Primary else Signal.Warning,
+                    modifier = Modifier.size(26.dp)
                 )
                 Text(
                     text = when {
@@ -505,44 +372,18 @@ private fun AssignmentHeroCard(overview: GroupOverview?, onEdit: () -> Unit, mod
                         overview.assignmentMissing -> "Biriktirilgan mashg'ulot o'chirilgan"
                         else -> "Hech narsa biriktirilmagan"
                     },
-                    style = MaterialTheme.typography.displaySmall,
-                    fontWeight = FontWeight.Black,
-                    color = if (assigned) Color(0xFF1E293B) else accent,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = if (assigned) Signal.Ink else Signal.Warning,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis
                 )
-                if (assigned) {
-                    Surface(
-                        color = accent.copy(alpha = 0.12f),
-                        shape = CircleShape,
-                        modifier = Modifier.padding(top = 8.dp)
-                    ) {
-                        Text(
-                            assignmentLabel(overview!!.kind!!, overview.mode),
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-                            color = accent,
-                            fontWeight = FontWeight.Black
-                        )
-                    }
-                } else if (overview != null) {
-                    Text(
-                        "Bu guruh tinglovchilari hozircha mashg'ulot boshlay olmaydi.",
-                        color = Color(0xFF64748B),
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
-                }
             }
-            Button(
-                onClick = onEdit,
-                enabled = overview != null,
-                modifier = Modifier.height(56.dp),
-                shape = AppDesign.ComponentShape,
-                colors = ButtonDefaults.buttonColors(containerColor = accent)
-            ) {
-                Icon(Icons.Default.Edit, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text(if (assigned) "O'zgartirish" else "Biriktirish", fontWeight = FontWeight.Black)
+            if (assigned) {
+                StatusChip(assignmentLabel(overview!!.kind!!, overview.mode), Signal.Container, Signal.OnContainer)
+            } else if (overview != null) {
+                Text("Bu guruh tinglovchilari hozircha mashg'ulot boshlay olmaydi.", style = MaterialTheme.typography.bodySmall, color = Signal.Muted)
             }
+            Spacer(Modifier.height(4.dp))
+            SignalButton(if (assigned) "O'zgartirish" else "Biriktirish", onClick = onEdit, enabled = overview != null, icon = Icons.Default.Edit, style = if (assigned) ButtonStyle.Tonal else ButtonStyle.Gradient, height = 40.dp)
         }
     }
 }
@@ -556,13 +397,15 @@ fun GroupPasswordDialog(
     onSave: (String) -> Unit
 ) {
     var value by remember { mutableStateOf(currentPassword) }
+    val fieldFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { fieldFocus.requestFocus() } }
     PostStudyDialog(
         onDismissRequest = onDismiss,
-        title = "'$groupName' paroli",
+        title = "$groupName paroli",
         text = "Tinglovchilar bu guruhga kirishda shu parolni kiritadi. Maydonni bo'sh qoldirsangiz, parol olib tashlanadi.",
         confirmText = "Saqlash",
         onConfirm = { onSave(value.trim()) },
-        content = { PasswordField(value, onValueChange = { value = it }) }
+        content = { PasswordField(value, onValueChange = { value = it }, modifier = Modifier.focusRequester(fieldFocus)) }
     )
 }
 
@@ -577,6 +420,8 @@ private fun GroupFormDialog(
     var name by remember { mutableStateOf(initialName) }
     var password by remember { mutableStateOf(initialPassword) }
     var error by remember { mutableStateOf<String?>(null) }
+    val fieldFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { fieldFocus.requestFocus() } }
     PostStudyDialog(
         onDismissRequest = onDismiss,
         title = title,
@@ -599,11 +444,11 @@ private fun GroupFormDialog(
                     onValueChange = { if (it.length <= 60) name = it; error = null },
                     label = { Text("Guruh nomi") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = AppDesign.ComponentShape
+                    modifier = Modifier.fillMaxWidth().focusRequester(fieldFocus),
+                    shape = AppDesign.SmallShape
                 )
                 PasswordField(password, onValueChange = { password = it; error = null })
-                error?.let { Text(it, color = DangerRed, fontWeight = FontWeight.Bold) }
+                error?.let { Text(it, color = Signal.Danger, style = MaterialTheme.typography.labelLarge) }
             }
         }
     )
@@ -611,19 +456,15 @@ private fun GroupFormDialog(
 
 /** Plain text on purpose: the teacher needs to see what they type. */
 @Composable
-private fun PasswordField(value: String, onValueChange: (String) -> Unit) {
+private fun PasswordField(value: String, onValueChange: (String) -> Unit, modifier: Modifier = Modifier) {
     OutlinedTextField(
         value = value,
         onValueChange = { if (it.length <= 32 && '\n' !in it) onValueChange(it) },
         label = { Text("Guruh paroli") },
-        leadingIcon = { Icon(Icons.Default.Key, contentDescription = null) },
+        leadingIcon = { Icon(Icons.Outlined.Key, contentDescription = null) },
         singleLine = true,
-        modifier = Modifier.fillMaxWidth(),
-        shape = AppDesign.ComponentShape,
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = AppDesign.Violet,
-            focusedLabelColor = AppDesign.Violet
-        )
+        modifier = modifier.fillMaxWidth(),
+        shape = AppDesign.SmallShape
     )
 }
 
@@ -640,6 +481,8 @@ internal fun NameDialog(
     onConfirm: (String) -> Unit
 ) {
     var value by remember { mutableStateOf(initialValue) }
+    val fieldFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { fieldFocus.requestFocus() } }
     PostStudyDialog(
         onDismissRequest = onDismiss,
         title = title,
@@ -655,12 +498,8 @@ internal fun NameDialog(
                 onValueChange = { if (it.length <= maxLength) value = it },
                 label = { Text(label) },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                shape = AppDesign.ComponentShape,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = AppDesign.Indigo,
-                    focusedLabelColor = AppDesign.Indigo
-                )
+                modifier = Modifier.fillMaxWidth().focusRequester(fieldFocus),
+                shape = AppDesign.SmallShape
             )
         }
     )

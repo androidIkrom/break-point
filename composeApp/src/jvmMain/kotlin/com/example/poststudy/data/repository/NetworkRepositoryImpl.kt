@@ -20,9 +20,9 @@ class NetworkRepositoryImpl : NetworkRepository {
     override fun startServer(
         port: Int?,
         getSession: (groupId: Int) -> Result<SessionData>,
-        onRecordReceived: (ExamRecord) -> Unit,
+        onSubmission: (Submission) -> Result<GradedResult>,
         adminName: () -> String
-    ): Boolean = NetworkManager.startServer(port, getSession, onRecordReceived, adminName)
+    ): Boolean = NetworkManager.startServer(port, getSession, onSubmission, adminName)
 
     override fun discoverAdmins(): List<com.example.poststudy.data.network.ActiveAdmin> =
         com.example.poststudy.data.network.LanDiscovery.discover()
@@ -55,6 +55,6 @@ class NetworkRepositoryImpl : NetworkRepository {
     override fun createStudentRemote(address: ServerAddress, name: String, groupId: Int, password: String): Result<Int> =
         NetworkManager.createStudentRemote(address, name, groupId, password)
 
-    override fun submitResult(address: ServerAddress, record: ExamRecord, password: String): Result<Unit> =
-        NetworkManager.submitResult(address, record, password)
+    override fun submitAnswers(address: ServerAddress, submission: Submission, password: String): Result<GradedResult> =
+        NetworkManager.submitAnswers(address, submission, password)
 }

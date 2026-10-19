@@ -1,162 +1,93 @@
 package com.example.poststudy.presentation.ui.screens.student
 
-import com.example.poststudy.presentation.ui.components.ScrollableCentered
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.poststudy.presentation.ui.components.BackButton
-import com.example.poststudy.presentation.theme.AppDesign
-import com.example.poststudy.presentation.ui.components.hoverEffect
+import com.example.poststudy.presentation.theme.LocalReduceMotion
+import com.example.poststudy.presentation.theme.Signal
+import com.example.poststudy.presentation.ui.components.*
+import com.example.poststudy.presentation.ui.screens.intro.Reveal
+import kotlinx.coroutines.delay
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StudentHomeScreen(
     onNavigateToPreparation: () -> Unit,
     onNavigateToTest: () -> Unit,
     onBack: () -> Unit
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AppDesign.BackgroundGradient)
-    ) {
-        // Decorative background elements
-        Box(
-            modifier = Modifier
-                .size(600.dp)
-                .offset(x = (-200).dp, y = (-200).dp)
-                .background(Color(0xFF10B981).copy(alpha = 0.05f), CircleShape)
-        )
-        Box(
-            modifier = Modifier
-                .size(500.dp)
-                .align(Alignment.BottomEnd)
-                .offset(x = 150.dp, y = 150.dp)
-                .background(Color(0xFF3B82F6).copy(alpha = 0.05f), CircleShape)
-        )
+    val parallax = rememberParallax()
+    val reduceMotion = LocalReduceMotion.current
+    var visible by remember { mutableStateOf(reduceMotion) }
+    LaunchedEffect(Unit) { delay(60); visible = true }
 
-        Scaffold(
-            containerColor = Color.Transparent,
-            topBar = {
-                TopAppBar(
-                    title = {
-                        Text(
-                            "Tinglovchi Paneli",
-                            color = Color(0xFF065F46),
-                            fontWeight = FontWeight.Black
-                        )
-                    },
-                    navigationIcon = {
-                        BackButton(onClick = onBack)
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-                )
-            }
-        ) { paddingValues ->
-            ScrollableCentered(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .padding(horizontal = 32.dp)
-            ) {
-                Text(
-                    text = "Xush kelibsiz, tinglovchi",
-                    style = MaterialTheme.typography.displaySmall,
-                    color = Color(0xFF1E293B),
-                    fontWeight = FontWeight.Black
-                )
-                Text(
-                    text = "Bugun qaysi mavzuda bilimingizni boyitamiz?",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = Color(0xFF64748B),
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 64.dp)
-                )
+    Box(Modifier.fillMaxSize().parallaxSource(parallax)) {
+        SignalBackground(parallax = parallax.value)
+        Row(Modifier.align(Alignment.TopStart).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            BackButton(onClick = onBack, onDark = true)
+            Spacer(Modifier.width(12.dp))
+            Text("Tinglovchi paneli", style = MaterialTheme.typography.titleLarge, color = Signal.OnDark)
+        }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth().widthIn(max = 1000.dp),
-                    horizontalArrangement = Arrangement.spacedBy(32.dp)
-                ) {
-                    StudentHomeCard(
-                        modifier = Modifier.weight(1f),
-                        title = "Tayyorgarlik",
-                        subtitle = "Darsliklarni o'rganish",
-                        icon = Icons.AutoMirrored.Filled.MenuBook,
-                        color = Color(0xFFF59E0B), // Amber 500
-                        onClick = onNavigateToPreparation
-                    )
-                    StudentHomeCard(
-                        modifier = Modifier.weight(1f),
-                        title = "Bilim testi",
-                        subtitle = "O'zingizni sinab ko'ring",
-                        icon = Icons.AutoMirrored.Filled.Assignment,
-                        color = Color(0xFF10B981), // Emerald 500
-                        onClick = onNavigateToTest
-                    )
+        ScrollableCentered(Modifier.fillMaxSize().padding(horizontal = 56.dp, vertical = 72.dp)) {
+            Column(Modifier.widthIn(max = 1000.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(28.dp)) {
+                Reveal(visible, 0) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Eyebrow("Tinglovchi", color = Signal.Amber)
+                        Text("Xush kelibsiz, tinglovchi", style = MaterialTheme.typography.displayLarge, color = Signal.OnDark)
+                        Text("Bugun qaysi mavzuda bilimingizni boyitamiz?", style = MaterialTheme.typography.bodyLarge, color = Signal.OnDarkMuted)
+                    }
+                }
+                AdaptiveGrid(
+                    items = listOf(
+                        HomeChoice("Tayyorgarlik", "Darsliklarni o'rganish. Shu kompyuterdagi taqdimotlarni taymersiz ko'rib chiqing.", "Darslarni ochish", Icons.AutoMirrored.Filled.MenuBook, Signal.GradientCyanAmber, Signal.Amber, 100, onNavigateToPreparation),
+                        HomeChoice("Bilim testi", "O'zingizni sinab ko'ring. Guruhingizga biriktirilgan mashg'ulotni boshlang.", "Guruhni tanlash", Icons.AutoMirrored.Filled.Assignment, Signal.GradientPrimary, Signal.Cyan, 160, onNavigateToTest)
+                    ),
+                    minItemWidth = 320.dp,
+                    spacing = 20.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) { item, itemModifier ->
+                    Reveal(visible, item.delay, itemModifier) {
+                        GlassCard(Modifier.fillMaxWidth().heightIn(min = 240.dp), onClick = item.onClick, padding = 28.dp) { hovered ->
+                            GradientTile(item.brush, Modifier.glassIcon(hovered), size = 56.dp, glow = item.accent) {
+                                Icon(item.icon, contentDescription = null, modifier = Modifier.size(28.dp), tint = if (item.accent == Signal.Amber) Signal.Dark else Color.White)
+                            }
+                            Spacer(Modifier.height(18.dp))
+                            Text(item.title, style = MaterialTheme.typography.headlineMedium, color = Signal.OnDark)
+                            Spacer(Modifier.height(6.dp))
+                            Text(item.description, style = MaterialTheme.typography.bodyLarge, color = Signal.OnDarkMuted)
+                            Spacer(Modifier.weight(1f))
+                            Spacer(Modifier.height(18.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(item.action, style = MaterialTheme.typography.labelLarge, color = item.accent)
+                                Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = item.accent, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 }
 
-@Composable
-fun StudentHomeCard(
-    modifier: Modifier,
-    title: String,
-    subtitle: String,
-    icon: ImageVector,
-    color: Color,
-    onClick: () -> Unit
-) {
-    Surface(
-        onClick = onClick,
-        modifier = modifier
-            .heightIn(min = 200.dp)
-            .hoverEffect(),
-        shape = AppDesign.ComponentShape,
-        color = Color.White,
-        border = BorderStroke(3.dp, color),
-        shadowElevation = 8.dp
-    ) {
-        Column(
-            modifier = Modifier.padding(32.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(64.dp)
-                    .background(color.copy(alpha = 0.15f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(32.dp))
-            }
-
-            Column {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Black,
-                    color = color
-                )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF64748B),
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        }
-    }
-}
+private class HomeChoice(
+    val title: String,
+    val description: String,
+    val action: String,
+    val icon: ImageVector,
+    val brush: Brush,
+    val accent: Color,
+    val delay: Int,
+    val onClick: () -> Unit
+)

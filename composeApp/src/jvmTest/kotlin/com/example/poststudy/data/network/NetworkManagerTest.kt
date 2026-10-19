@@ -1,6 +1,8 @@
 package com.example.poststudy.data.network
 
 import com.example.poststudy.TestFixtures
+import com.example.poststudy.data.session.AppServer
+import com.example.poststudy.data.session.ServedSessions
 import com.example.poststudy.data.session.SessionBuilder
 import com.example.poststudy.data.session.toPreparedSession
 import com.example.poststudy.data.session.toSessionData
@@ -74,13 +76,12 @@ class NetworkManagerTest {
         val lesson = runBlocking { repo.getAllLessons(subjectId).first().single() }
         repo.setGroupAssignment(GroupAssignment(assignedGroup, AssignmentKind.Lesson, lesson.id, LessonMode.ReAppropriation))
 
-        val received = mutableListOf<ExamRecord>()
         val port = freePort()
         assertTrue(
             NetworkManager.startServer(
                 port,
-                { groupId -> SessionBuilder.buildForGroup(groupId).map { it.toSessionData() } },
-                { received += it }
+                { groupId -> SessionBuilder.buildForGroup(groupId).map { it.toSessionData(ServedSessions.issue(groupId, it)) } },
+                AppServer::handleSubmission
             )
         )
         try {
@@ -109,12 +110,15 @@ class NetworkManagerTest {
             NetworkManager.verifyGroup(address, assignedGroup, password).getOrThrow()
             NetworkManager.verifyGroup(address, emptyGroup, "").getOrThrow()
 
-            // The assigned group gets slides and questions over the wire
-            val session = NetworkManager.fetchSession(address, assignedGroup, password).getOrThrow().toPreparedSession()
+            // The assigned group gets slides and questions over the wire, but never the correct answers
+            val sessionData = NetworkManager.fetchSession(address, assignedGroup, password).getOrThrow()
+            val session = sessionData.toPreparedSession()
             assertEquals("Rim tarixi", session.title)
             assertEquals(AssignmentKind.Lesson, session.kind)
             assertEquals(2, session.slides.size)
             assertEquals(3, session.questions.size)
+            assertTrue(session.questions.all { it.correctIndex < 0 })
+            val token = assertNotNull(sessionData.token)
 
             // A group without an assignment gets the explanation, not a crash
             val error = NetworkManager.fetchSession(address, emptyGroup, "").exceptionOrNull()
@@ -128,25 +132,30 @@ class NetworkManagerTest {
             val students = NetworkManager.fetchStudents(address, assignedGroup, password).getOrThrow()
             assertEquals(listOf("Ғулом O'ktamov"), students.map { it.name })
 
-            val record = ExamRecord(
-                studentName = "Ғулом O'ktamov",
-                lessonTitle = "Rim tarixi",
-                totalQuestions = 3,
-                correctAnswers = 2,
-                wrongAnswers = 1,
-                wrongDetails = "",
-                timeSpentSeconds = 42,
-                timestamp = 1L,
-                groupId = assignedGroup,
-                studentId = id1,
-                subjectId = subjectId
-            )
-            assertTrue(NetworkManager.submitResult(address, record, wrong).isFailure)
-            assertTrue(received.isEmpty())
+            // The admin computer grades: two right, the last one deliberately wrong
+            val served = assertNotNull(ServedSessions.find(token))
+            val answers: List<Int?> = served.questions.mapIndexed { i, q -> if (i < 2) q.correctIndex else (q.correctIndex + 1) % q.options.size }
+            val submission = Submission(token, assignedGroup, id1, "kimdir", answers, 42, "sub-1")
+            assertTrue(NetworkManager.submitAnswers(address, submission, wrong).isFailure)
             // A valid password for another group does not open this one
-            assertTrue(NetworkManager.submitResult(address, record.copy(groupId = otherLockedGroup), password).isFailure)
-            NetworkManager.submitResult(address, record, password).getOrThrow()
-            assertEquals(listOf(record), received)
+            assertTrue(NetworkManager.submitAnswers(address, submission.copy(groupId = otherLockedGroup), password).isFailure)
+            assertTrue(runBlocking { repo.getAllExamRecords(subjectId).first() }.none { it.submissionId == "sub-1" })
+
+            val graded = NetworkManager.submitAnswers(address, submission, password).getOrThrow()
+            assertEquals(GradedResult(2, 3, listOf(2)), graded)
+            // A retry after a lost reply gets the same score and is stored once, under the registered name
+            assertEquals(graded, NetworkManager.submitAnswers(address, submission, password).getOrThrow())
+            val stored = runBlocking { repo.getAllExamRecords(subjectId).first() }.filter { it.submissionId == "sub-1" }
+            assertEquals(1, stored.size)
+            assertEquals(2, stored.single().correctAnswers)
+            assertEquals("Ғулом O'ktamov", stored.single().studentName)
+            assertTrue(stored.single().wrongDetails.contains("To'g'ri javob"))
+            // A second attempt on the same session or a made-up token is refused
+            val refused = NetworkManager.submitAnswers(address, submission.copy(submissionId = "sub-2", answers = served.questions.map { it.correctIndex }), password)
+            assertTrue(refused.isFailure)
+            assertTrue(refused.exceptionOrNull()!!.message!!.contains("allaqachon"))
+            assertTrue(NetworkManager.submitAnswers(address, submission.copy(token = "yolg'on", submissionId = "sub-3"), password).isFailure)
+            assertEquals(1, runBlocking { repo.getAllExamRecords(subjectId).first() }.count { it.studentId == id1 })
 
             assertTrue(NetworkManager.createStudentRemote(address, "   ", assignedGroup, password).isFailure)
         } finally {
@@ -167,7 +176,7 @@ class NetworkManagerTest {
             null
         }
         try {
-            assertTrue(NetworkManager.startServer(getSession = { Result.failure(Exception("-")) }, onRecordReceived = {}))
+            assertTrue(NetworkManager.startServer(getSession = { Result.failure(Exception("-")) }, onSubmission = { Result.failure(Exception("-")) }))
             val port = NetworkManager.serverPort!!
             assertNotEquals(NetworkManager.DEFAULT_PORT, port)
             assertTrue(port in NetworkManager.PORT_RANGE)
@@ -195,7 +204,7 @@ class NetworkManagerTest {
                 NetworkManager.startServer(
                     httpPort,
                     { Result.failure(Exception("-")) },
-                    {},
+                    { Result.failure(Exception("-")) },
                     adminName = { "Karimov Aziz" }
                 )
             )
