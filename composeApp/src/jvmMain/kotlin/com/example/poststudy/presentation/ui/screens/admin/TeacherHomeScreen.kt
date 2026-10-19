@@ -10,6 +10,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.filled.DeleteForever
@@ -173,6 +174,7 @@ fun TeacherHomeScreen(
             SignalBackground(Modifier.matchParentSize(), alpha = 0.8f)
             Column(Modifier.fillMaxWidth().padding(horizontal = Space.page, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    SignalButton("Fanlar", onClick = onBack, style = ButtonStyle.Glass, icon = Icons.AutoMirrored.Filled.ArrowBack, height = 36.dp, contentPadding = PaddingValues(start = 12.dp, end = 14.dp))
                     SignalButton(subjectName, onClick = onBack, style = ButtonStyle.Glass, trailingIcon = Icons.Default.KeyboardArrowDown, height = 36.dp, contentPadding = PaddingValues(start = 14.dp, end = 10.dp))
                     Text("${groups?.size ?: 0} guruh · $studentCount tinglovchi", style = MaterialTheme.typography.bodySmall, color = Signal.OnDarkMuted)
                     Spacer(Modifier.weight(1f))

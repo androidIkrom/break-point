@@ -214,7 +214,14 @@ fun App() {
           Row(Modifier.fillMaxSize()) {
             // The rail stays put while admin screens slide underneath it
             AnimatedVisibility(visible = currentScreen.hasAdminRail(), enter = expandHorizontally(), exit = shrinkHorizontally()) {
-                AdminRail(current = currentScreen.adminSection(), onNavigate = adminNav)
+                AdminRail(
+                    current = currentScreen.adminSection(),
+                    onNavigate = adminNav,
+                    onExit = {
+                        val leave: () -> Unit = { goBack(Screen.RoleSelection) }
+                        if (unsavedGuard.isDirty()) blockedNavigation = leave else leave()
+                    }
+                )
             }
             CompositionLocalProvider(LocalAdminNav provides adminNav, LocalUnsavedGuard provides unsavedGuard) {
             AnimatedContent(

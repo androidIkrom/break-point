@@ -9,6 +9,7 @@ import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
+import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Assignment
 import androidx.compose.material.icons.outlined.BarChart
@@ -61,7 +62,7 @@ val LocalUnsavedGuard = staticCompositionLocalOf { UnsavedGuard() }
  * bar and tint; the indicator slides to the clicked item.
  */
 @Composable
-fun AdminRail(current: AdminSection?, onNavigate: (AdminSection) -> Unit, modifier: Modifier = Modifier) {
+fun AdminRail(current: AdminSection?, onNavigate: (AdminSection) -> Unit, onExit: () -> Unit, modifier: Modifier = Modifier) {
     val main = listOf(AdminSection.Home, AdminSection.Lessons, AdminSection.Exams, AdminSection.Groups, AdminSection.Monitoring, AdminSection.History)
     Column(
         modifier
@@ -93,28 +94,36 @@ fun AdminRail(current: AdminSection?, onNavigate: (AdminSection) -> Unit, modifi
         }
         Spacer(Modifier.weight(1f))
         RailItem(AdminSection.Help, current == AdminSection.Help, onNavigate)
+        Spacer(Modifier.height(4.dp))
+        // Leaves the admin area for the role screen; amber so it reads as an exit, not a section
+        RailButton(Icons.AutoMirrored.Outlined.Logout, "Chiqish", selected = false, accent = Signal.Amber, onClick = onExit)
     }
 }
 
 @Composable
 private fun RailItem(section: AdminSection, selected: Boolean, onNavigate: (AdminSection) -> Unit) {
+    RailButton(section.icon, section.label, selected, Signal.OnDarkFaint) { onNavigate(section) }
+}
+
+@Composable
+private fun RailButton(icon: ImageVector, label: String, selected: Boolean, accent: Color, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     val tint by animateColorAsState(
-        when { selected -> Signal.Cyan; hovered -> Signal.OnDark; else -> Signal.OnDarkFaint },
+        when { selected -> Signal.Cyan; hovered -> Signal.OnDark; else -> accent },
         AppMotion.tweenOrSnap(AppMotion.fast), label = "railTint"
     )
     Surface(
-        onClick = { onNavigate(section) },
+        onClick = onClick,
         modifier = Modifier.width(80.dp).height(60.dp),
         shape = AppDesign.ComponentShape,
         color = if (hovered && !selected) Color.White.copy(alpha = 0.06f) else Color.Transparent,
         interactionSource = interaction
     ) {
         Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            Icon(section.icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
             Spacer(Modifier.height(4.dp))
-            Text(section.label, style = MaterialTheme.typography.labelMedium, color = tint, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(label, style = MaterialTheme.typography.labelMedium, color = tint, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
