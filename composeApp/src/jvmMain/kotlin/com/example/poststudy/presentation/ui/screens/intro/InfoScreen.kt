@@ -1,15 +1,14 @@
 package com.example.poststudy.presentation.ui.screens.intro
 
-import androidx.compose.animation.*
-import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
+import androidx.compose.material.icons.filled.Adjust
+import androidx.compose.material.icons.filled.Computer
+import androidx.compose.material.icons.filled.TaskAlt
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -18,161 +17,85 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.*
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.example.poststudy.presentation.theme.AppDesign
-import com.example.poststudy.presentation.ui.components.hoverEffect
-import com.example.poststudy.presentation.ui.components.InstituteLogo
+import com.example.poststudy.presentation.theme.LocalReduceMotion
+import com.example.poststudy.presentation.theme.Signal
+import com.example.poststudy.presentation.ui.components.*
 import kotlinx.coroutines.delay
 
 @Composable
 fun InfoScreen(onContinue: () -> Unit) {
-    var visible by remember { mutableStateOf(false) }
+    val reduceMotion = LocalReduceMotion.current
+    var visible by remember { mutableStateOf(reduceMotion) }
     val focusRequester = remember { FocusRequester() }
-    
+    val parallax = rememberParallax()
+
     LaunchedEffect(Unit) {
-        delay(100)
+        delay(60)
         visible = true
-        focusRequester.requestFocus()
+        runCatching { focusRequester.requestFocus() }
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(AppDesign.BackgroundGradient)
+            .parallaxSource(parallax)
             .focusRequester(focusRequester)
-            .focusable() // Added focusable() to ensure the box can receive key events
+            .focusable()
             .onPreviewKeyEvent {
                 if (it.key == Key.Enter && it.type == KeyEventType.KeyDown) {
                     onContinue()
                     true
                 } else false
-            },
-        contentAlignment = Alignment.Center
+            }
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth(0.85f)
-                .padding(32.dp)
-                .verticalScroll(rememberScrollState()),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            AnimatedVisibility(
-                visible = visible,
-                enter = fadeIn() + expandVertically()
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    InstituteLogo(size = 170.dp, modifier = Modifier.padding(bottom = 16.dp))
-                    Text(
-                        text = "Loyiha haqida",
-                        style = MaterialTheme.typography.displaySmall,
-                        fontWeight = FontWeight.Black,
-                        color = Color(0xFF064E3B)
-                    )
-                    
-                    Text(
-                        text = "BreakPoint — ta'lim sifatini oshirish uchun innovatsion yechim",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Color(0xFF059669),
-                        modifier = Modifier.padding(top = 8.dp),
-                        textAlign = TextAlign.Center
-                    )
+        SignalBackground(parallax = parallax.value)
+
+        ScrollableCentered(Modifier.fillMaxSize().padding(horizontal = 56.dp, vertical = 32.dp)) {
+            Column(Modifier.widthIn(max = 1100.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(28.dp)) {
+                Reveal(visible, 0) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                        InstituteLogo(size = 96.dp, glow = true)
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Eyebrow("Loyiha haqida", color = Signal.Amber)
+                            Text("BreakPoint", style = MaterialTheme.typography.displayLarge, color = Signal.OnDark)
+                            Text("Ta'lim sifatini oshirish uchun innovatsion yechim", style = MaterialTheme.typography.bodyLarge, color = Signal.OnDarkMuted)
+                        }
+                    }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(48.dp))
-
-            AnimatedVisibility(
-                visible = visible,
-                enter = fadeIn() + slideInVertically { it / 2 }
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
-                    InfoRow(
-                        modifier = Modifier.hoverEffect(scale = 1.02f, yOffset = -5f),
-                        icon = Icons.Default.Adjust,
-                        title = "Loyihaning maqsadi",
-                        description = "O'quv jarayonini raqamlashtirish, bilimlarni nazorat qilishni avtomatlashtirish va pedagoglar bilan tinglovchilar o'rtasidagi aloqani soddalashtirish."
-                    )
-                    
-                    InfoRow(
-                        modifier = Modifier.hoverEffect(scale = 1.02f, yOffset = -5f),
-                        icon = Icons.Default.TaskAlt,
-                        title = "Asosiy vazifalari",
-                        description = "Dars materiallarini elektron shaklda taqdim etish, interaktiv testlar orqali baholash va natijalarni real vaqt rejimida tahlil qilish."
-                    )
-                    
-                    InfoRow(
-                        modifier = Modifier.hoverEffect(scale = 1.02f, yOffset = -5f),
-                        icon = Icons.Default.Computer,
-                        title = "Qo'llanish sohalari",
-                        description = "Oliy harbiy ta'lim muassasalari o'qitish tizimlarida foydalanish uchun mo'ljallangan."
-                    )
+                AdaptiveGrid(
+                    items = listOf(
+                        InfoItem(Icons.Default.Adjust, "Loyihaning maqsadi", "O'quv jarayonini raqamlashtirish, bilimlarni nazorat qilishni avtomatlashtirish va pedagoglar bilan tinglovchilar o'rtasidagi aloqani soddalashtirish.", 100),
+                        InfoItem(Icons.Default.TaskAlt, "Asosiy vazifalari", "Dars materiallarini elektron shaklda taqdim etish, interaktiv testlar orqali baholash va natijalarni real vaqt rejimida tahlil qilish.", 160),
+                        InfoItem(Icons.Default.Computer, "Qo'llanish sohalari", "Oliy harbiy ta'lim muassasalari o'qitish tizimlarida foydalanish uchun mo'ljallangan.", 220)
+                    ),
+                    minItemWidth = 280.dp,
+                    spacing = 18.dp,
+                    modifier = Modifier.fillMaxWidth()
+                ) { item, itemModifier ->
+                    Reveal(visible, item.delay, itemModifier) {
+                        GlassCard(Modifier.fillMaxWidth()) {
+                            GradientTile(Signal.GradientPrimary, size = 48.dp) {
+                                Icon(item.icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
+                            }
+                            Spacer(Modifier.height(14.dp))
+                            Text(item.title, style = MaterialTheme.typography.titleLarge, color = Signal.OnDark)
+                            Spacer(Modifier.height(6.dp))
+                            Text(item.description, style = MaterialTheme.typography.bodyMedium, color = Signal.OnDarkMuted)
+                        }
+                    }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(56.dp))
-
-            AnimatedVisibility(
-                visible = visible,
-                enter = fadeIn() + slideInVertically { it }
-            ) {
-                Button(
-                    onClick = onContinue,
-                    modifier = Modifier.width(300.dp).height(64.dp).hoverEffect(),
-                    shape = AppDesign.ComponentShape,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
-                ) {
-                    Text(
-                        "DAVOM ETISH",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Black
-                    )
+                Reveal(visible, 300) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        SignalButton("Davom etish", onClick = onContinue, style = ButtonStyle.Cyan, height = 52.dp, contentPadding = PaddingValues(horizontal = 32.dp))
+                        Text("Enter — davom etish", style = MaterialTheme.typography.bodySmall, color = Signal.OnDarkFaint)
+                    }
                 }
             }
         }
     }
 }
 
-@Composable
-fun InfoRow(
-    modifier: Modifier = Modifier,
-    icon: ImageVector,
-    title: String,
-    description: String
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(Color.White.copy(alpha = 0.6f), AppDesign.CardShape)
-            .padding(24.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(20.dp)
-    ) {
-        Surface(
-            color = Color(0xFF10B981),
-            shape = CircleShape,
-            modifier = Modifier.size(56.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(28.dp))
-            }
-        }
-        
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Black,
-                color = Color(0xFF1E293B)
-            )
-            Text(
-                text = description,
-                style = MaterialTheme.typography.bodyLarge,
-                color = Color(0xFF475569),
-                lineHeight = MaterialTheme.typography.bodyLarge.lineHeight * 1.2
-            )
-        }
-    }
-}
+private class InfoItem(val icon: ImageVector, val title: String, val description: String, val delay: Int)

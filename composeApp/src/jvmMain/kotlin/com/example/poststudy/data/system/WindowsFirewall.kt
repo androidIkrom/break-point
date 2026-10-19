@@ -18,6 +18,10 @@ object WindowsFirewall {
 
     val isWindows: Boolean = System.getProperty("os.name").orEmpty().startsWith("Windows", ignoreCase = true)
 
+    /** The rule is checked (and offered) once per run, before the server first listens. */
+    @Volatile
+    var checkedThisRun: Boolean = false
+
     /** BreakPoint.exe when installed, java.exe when started from the IDE. */
     val executablePath: String? = runCatching { ProcessHandle.current().info().command().orElse(null) }.getOrNull()
 

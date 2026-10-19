@@ -1,33 +1,33 @@
 package com.example.poststudy.presentation.ui.screens.admin
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.example.poststudy.presentation.ui.components.BackButton
-import com.example.poststudy.di.AppContainer
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import com.example.poststudy.data.util.TestParser
+import com.example.poststudy.di.AppContainer
 import com.example.poststudy.domain.model.Exam
 import com.example.poststudy.presentation.theme.AppDesign
+import com.example.poststudy.presentation.theme.Signal
+import com.example.poststudy.presentation.theme.Space
+import com.example.poststudy.presentation.ui.components.*
 import io.github.vinceglb.filekit.compose.rememberFilePickerLauncher
 import io.github.vinceglb.filekit.core.PickerMode
 import io.github.vinceglb.filekit.core.PickerType
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExamSettingsScreen(
     subjectId: Int,
@@ -42,6 +42,7 @@ fun ExamSettingsScreen(
     var testCountPerStudent by remember { mutableStateOf(examToEdit?.questionsPerStudent?.toString() ?: "10") }
     var testTimerMin by remember { mutableStateOf((examToEdit?.testTimerSeconds?.div(60))?.toString() ?: "30") }
     var errorMessage by remember { mutableStateOf("") }
+    var touched by remember { mutableStateOf(false) }
 
     // Initial parse if editing
     LaunchedEffect(testPath) {
@@ -59,6 +60,7 @@ fun ExamSettingsScreen(
     ) { file ->
         file?.let {
             testPath = it.path ?: ""
+            touched = true
             val result = TestParser.parseTest(testPath)
             totalQuestionsInFile = result.questions.size
             warnings = result.warnings
@@ -77,6 +79,15 @@ fun ExamSettingsScreen(
 
     val scope = rememberCoroutineScope()
     var isSaving by remember { mutableStateOf(false) }
+
+    val guard = LocalUnsavedGuard.current
+    val dirty = rememberUpdatedState(touched && !isSaving)
+    DisposableEffect(guard) {
+        guard.isDirty = { dirty.value }
+        onDispose { guard.isDirty = { false } }
+    }
+    var showLeaveDialog by remember { mutableStateOf(false) }
+    val leave: () -> Unit = { if (dirty.value) showLeaveDialog = true else onBack() }
 
     val saveExam: () -> Unit = {
         val tCount = testCountPerStudent.toIntOrNull() ?: 0
@@ -111,146 +122,102 @@ fun ExamSettingsScreen(
                     }
                 }
                 isSaving = false
+                touched = false
                 onSaveComplete()
             }
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AppDesign.BackgroundGradient)
-    ) {
-        Scaffold(
-            containerColor = Color.Transparent,
-            topBar = {
-                TopAppBar(
-                    title = { Text("Imtihon Sozlamalari", color = Color(0xFF065F46), fontWeight = FontWeight.Black) },
-                    navigationIcon = {
-                        BackButton(onClick = onBack)
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-                )
+    if (showLeaveDialog) {
+        PostStudyDialog(
+            onDismissRequest = { showLeaveDialog = false },
+            title = "Saqlanmagan o'zgarishlar",
+            text = "Imtihon hali saqlanmagan. Chiqib ketsangiz, kiritilgan ma'lumotlar yo'qoladi.",
+            confirmText = "Baribir chiqish",
+            dismissText = "Qolish",
+            confirmColor = Signal.Danger,
+            onConfirm = {
+                showLeaveDialog = false
+                touched = false
+                onBack()
             }
-        ) { paddingValues ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .verticalScroll(rememberScrollState())
-                    .padding(48.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Card(
-                    modifier = Modifier.widthIn(max = 700.dp).fillMaxWidth(),
-                    shape = AppDesign.CardShape,
-                    elevation = CardDefaults.cardElevation(defaultElevation = 16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    border = BorderStroke(3.dp, Color(0xFF6366F1).copy(alpha = 0.2f))
-                ) {
-                    Column(modifier = Modifier.padding(48.dp)) {
-                        if (errorMessage.isNotEmpty()) {
-                            Surface(
-                                color = Color(0xFFFEF2F2),
-                                shape = AppDesign.ComponentShape,
-                                modifier = Modifier.fillMaxWidth().padding(bottom = 32.dp),
-                                border = BorderStroke(2.dp, Color(0xFFEF4444).copy(alpha = 0.3f))
-                            ) {
-                                Text(errorMessage, color = Color(0xFFB91C1C), modifier = Modifier.padding(16.dp), fontWeight = FontWeight.Bold)
+        )
+    }
+
+    AdminPage(
+        title = if (examToEdit == null) "Yangi imtihon" else "Imtihonni tahrirlash",
+        eyebrow = "Imtihonlar",
+        onBack = leave
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = Space.page, vertical = Space.xl),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
+            SignalCard(Modifier.widthIn(max = 880.dp).fillMaxWidth(), padding = 28.dp) {
+                Column(verticalArrangement = Arrangement.spacedBy(28.dp)) {
+                    if (errorMessage.isNotEmpty()) {
+                        Surface(color = Signal.DangerContainer, shape = AppDesign.ComponentShape, border = BorderStroke(1.dp, Signal.DangerBorder), modifier = Modifier.fillMaxWidth()) {
+                            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Icon(Icons.Outlined.ErrorOutline, contentDescription = null, tint = Signal.Danger, modifier = Modifier.size(18.dp))
+                                Text(errorMessage, color = Signal.OnDangerContainer, style = MaterialTheme.typography.bodyMedium)
                             }
                         }
+                    }
 
-                        Text("Imtihon nomi", style = MaterialTheme.typography.titleLarge, color = Color(0xFF6366F1), fontWeight = FontWeight.Black)
-                        Spacer(Modifier.height(16.dp))
-
+                    SettingsSection("Imtihon nomi") {
                         OutlinedTextField(
                             value = title,
-                            onValueChange = { title = it },
-                            label = { Text("masalan, Yakuniy nazorat") },
+                            onValueChange = { title = it; touched = true },
+                            placeholder = { Text("masalan, Yakuniy nazorat") },
                             modifier = Modifier.fillMaxWidth(),
-                            shape = AppDesign.ComponentShape,
-                            singleLine = true,
-                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color(0xFF6366F1))
+                            shape = AppDesign.SmallShape,
+                            singleLine = true
                         )
+                    }
 
-                        Spacer(Modifier.height(32.dp))
-
-                        Text("TEST MATERIALI", style = MaterialTheme.typography.titleLarge, color = Color(0xFF6366F1), fontWeight = FontWeight.Black)
-                        Spacer(Modifier.height(16.dp))
-
-                        FilePickerRow(
-                            path = testPath,
-                            label = "Word faylini tanlang (.doc, .docx)",
-                            onSelect = { testLauncher.launch() }
-                        )
-
+                    SettingsSection("Test materiali", "Word hujjati (.doc, .docx), har bir tinglovchiga tasodifiy savollar beriladi") {
+                        FilePickerRow(path = testPath, label = "Word faylini tanlang", onSelect = { testLauncher.launch() })
                         if (totalQuestionsInFile > 0) {
-                            Text(
-                                "Faylda jami $totalQuestionsInFile ta yaroqli savol aniqlandi",
-                                color = Color(0xFF10B981),
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(top = 8.dp)
-                            )
+                            Spacer(Modifier.height(8.dp))
+                            StatusChip("Faylda $totalQuestionsInFile ta yaroqli savol", Signal.SuccessContainer, Signal.OnSuccessContainer, icon = Icons.Default.Check, iconTint = Signal.Success)
                         }
-
                         if (warnings.isNotEmpty()) {
-                            Spacer(Modifier.height(16.dp))
-                            Surface(
-                                color = Color(0xFFFFF7ED),
-                                shape = AppDesign.ComponentShape,
-                                border = BorderStroke(1.dp, Color(0xFFF97316).copy(alpha = 0.3f)),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(modifier = Modifier.padding(16.dp)) {
-                                    Text("Ogohlantirishlar:", fontWeight = FontWeight.Black, color = Color(0xFFC2410C))
-                                    warnings.forEach { warning ->
-                                        Text("• $warning", style = MaterialTheme.typography.bodySmall, color = Color(0xFF9A3412))
-                                    }
-                                }
-                            }
+                            Spacer(Modifier.height(10.dp))
+                            WarningsBox(warnings)
                         }
+                    }
 
-                        Spacer(modifier = Modifier.height(48.dp))
-
-                        Text("Imtihon qoidalari", style = MaterialTheme.typography.titleLarge, color = Color(0xFF6366F1), fontWeight = FontWeight.Black)
-                        Spacer(Modifier.height(24.dp))
-
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                    SettingsSection("Imtihon qoidalari") {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                             OutlinedTextField(
                                 value = testCountPerStudent,
-                                onValueChange = { testCountPerStudent = it },
+                                onValueChange = { testCountPerStudent = it; touched = true },
                                 label = { Text("Har bir tinglovchi uchun savollar soni") },
+                                supportingText = if (totalQuestionsInFile > 0) ({ Text("1 dan $totalQuestionsInFile gacha") }) else null,
                                 modifier = Modifier.weight(1f),
-                                shape = AppDesign.ComponentShape,
+                                shape = AppDesign.SmallShape,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color(0xFF6366F1))
+                                singleLine = true
                             )
-
                             OutlinedTextField(
                                 value = testTimerMin,
-                                onValueChange = { testTimerMin = it },
+                                onValueChange = { testTimerMin = it; touched = true },
                                 label = { Text("Vaqt (daqiqalarda)") },
                                 modifier = Modifier.weight(1f),
-                                shape = AppDesign.ComponentShape,
+                                shape = AppDesign.SmallShape,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color(0xFF6366F1))
+                                singleLine = true
                             )
-                        }
-
-                        Spacer(modifier = Modifier.height(64.dp))
-
-                        Button(
-                            onClick = saveExam,
-                            modifier = Modifier.fillMaxWidth().height(72.dp),
-                            shape = AppDesign.ComponentShape,
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6366F1), contentColor = Color.White),
-                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 12.dp)
-                        ) {
-                            Text("Imtihonni saqlash", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
                         }
                     }
                 }
+            }
+
+            Row(Modifier.widthIn(max = 880.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) {
+                Spacer(Modifier.weight(1f))
+                SignalButton("Bekor qilish", onClick = leave, style = ButtonStyle.Outlined, height = 46.dp)
+                SignalButton(if (isSaving) "Saqlanmoqda..." else "Imtihonni saqlash", onClick = saveExam, enabled = !isSaving, style = ButtonStyle.Gradient, icon = Icons.Default.Check, height = 46.dp)
             }
         }
     }

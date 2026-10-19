@@ -1,43 +1,42 @@
 package com.example.poststudy.presentation.ui.screens.groups
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.filled.Assignment
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.outlined.Assignment
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.*
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.example.poststudy.di.AppContainer
 import com.example.poststudy.domain.model.*
 import com.example.poststudy.presentation.theme.AppDesign
+import com.example.poststudy.presentation.theme.AppMotion
+import com.example.poststudy.presentation.theme.Signal
+import com.example.poststudy.presentation.ui.components.ButtonStyle
+import com.example.poststudy.presentation.ui.components.SignalButton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private val TextDark = Color(0xFF1E293B)
-private val TextMuted = Color(0xFF64748B)
-private val BorderLight = Color(0xFFE2E8F0)
-private val Danger = Color(0xFFEF4444)
-
 fun kindIcon(kind: AssignmentKind): ImageVector = when (kind) {
-    AssignmentKind.Lesson -> Icons.AutoMirrored.Filled.MenuBook
-    AssignmentKind.Exam -> Icons.Default.Assignment
+    AssignmentKind.Lesson -> Icons.AutoMirrored.Outlined.MenuBook
+    AssignmentKind.Exam -> Icons.Outlined.Assignment
 }
 
 /** Short description of what a group's students will do, e.g. "Dars • Faqat test". */
@@ -93,14 +92,15 @@ fun GroupAssignmentDialog(
     }
 
     AssignmentDialogFrame(
-        title = "'${group.name}' guruhiga biriktirish",
+        title = "${group.name} guruhiga biriktirish",
         subtitle = "Guruh tinglovchilari kirganda aynan shu mashg'ulot ochiladi",
         onDismiss = onDismiss,
         onConfirm = save,
         confirmEnabled = selectedId != null && !isSaving,
         extraAction = if (group.kind != null) {
             {
-                TextButton(
+                SignalButton(
+                    "Biriktirishni olib tashlash",
                     onClick = {
                         isSaving = true
                         scope.launch {
@@ -108,10 +108,10 @@ fun GroupAssignmentDialog(
                             onSaved()
                         }
                     },
-                    enabled = !isSaving
-                ) {
-                    Text("Biriktirishni olib tashlash", color = Danger, fontWeight = FontWeight.Bold)
-                }
+                    enabled = !isSaving,
+                    style = ButtonStyle.Text,
+                    height = 40.dp
+                )
             }
         } else null
     ) {
@@ -126,7 +126,7 @@ fun GroupAssignmentDialog(
         val loadedLessons = lessons
         when {
             loadedLessons == null -> Box(Modifier.fillMaxWidth().height(240.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = AppDesign.Indigo)
+                CircularProgressIndicator(color = Signal.Primary, trackColor = Signal.Container)
             }
             kind == AssignmentKind.Lesson -> ItemList(
                 items = loadedLessons.map { ListItem(it.id, it.title, it.mode.label) },
@@ -146,7 +146,7 @@ fun GroupAssignmentDialog(
         if (kind == AssignmentKind.Lesson) {
             ModeSelector(selected = mode, allowed = if (selectedLesson == null) emptyList() else allowed, onSelect = { mode = it })
         } else {
-            Text("Imtihon faqat test sifatida o'tkaziladi.", color = TextMuted, fontWeight = FontWeight.Bold)
+            Text("Imtihon faqat test sifatida o'tkaziladi.", color = Signal.Muted, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
@@ -202,7 +202,7 @@ fun AssignToGroupsDialog(
     }
 
     AssignmentDialogFrame(
-        title = "'$title' — guruhlarga biriktirish",
+        title = "$title — guruhlarga biriktirish",
         subtitle = "Belgilangan guruhlarning avvalgi biriktirmasi shu ${kind.label.lowercase()} bilan almashtiriladi",
         onDismiss = onDismiss,
         onConfirm = save,
@@ -211,12 +211,12 @@ fun AssignToGroupsDialog(
         val loaded = groups
         when {
             loaded == null -> Box(Modifier.fillMaxWidth().height(240.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = AppDesign.Indigo)
+                CircularProgressIndicator(color = Signal.Primary, trackColor = Signal.Container)
             }
             loaded.isEmpty() -> Text(
                 "Bu fanda guruhlar yo'q. Avval 'Guruhlar' bo'limida guruh yarating.",
-                color = TextMuted,
-                fontWeight = FontWeight.Bold,
+                color = Signal.Muted,
+                style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(vertical = 24.dp)
             )
             else -> LazyColumn(
@@ -233,7 +233,7 @@ fun AssignToGroupsDialog(
                     SelectableRow(
                         selected = isChecked,
                         onClick = { if (isChecked) checked.remove(g.id) else checked.add(g.id) },
-                        leading = { Checkbox(checked = isChecked, onCheckedChange = null) },
+                        leading = { Checkbox(checked = isChecked, onCheckedChange = null, colors = CheckboxDefaults.colors(checkedColor = Signal.Primary)) },
                         title = g.name,
                         subtitle = current
                     )
@@ -245,7 +245,7 @@ fun AssignToGroupsDialog(
         if (kind == AssignmentKind.Lesson) {
             ModeSelector(selected = mode, allowed = allowed, onSelect = { mode = it })
         } else {
-            Text("Imtihon faqat test sifatida o'tkaziladi.", color = TextMuted, fontWeight = FontWeight.Bold)
+            Text("Imtihon faqat test sifatida o'tkaziladi.", color = Signal.Muted, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
@@ -264,25 +264,19 @@ private fun AssignmentDialogFrame(
         Surface(
             modifier = Modifier
                 .width(640.dp)
+                .shadow(24.dp, AppDesign.CardShape, ambientColor = Signal.Dark, spotColor = Signal.Dark)
                 .onPreviewKeyEvent {
                     if (it.type == KeyEventType.KeyDown && it.key == Key.Escape) {
                         onDismiss(); true
                     } else false
                 },
             shape = AppDesign.CardShape,
-            color = Color.White,
-            border = BorderStroke(2.dp, AppDesign.Emerald.copy(alpha = 0.25f))
+            color = Signal.Card,
+            border = BorderStroke(1.dp, Signal.Outline)
         ) {
-            Column(Modifier.padding(32.dp)) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Black,
-                    color = Color(0xFF065F46),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(subtitle, color = TextMuted, modifier = Modifier.padding(top = 4.dp, bottom = 20.dp))
+            Column(Modifier.padding(28.dp)) {
+                Text(title, style = MaterialTheme.typography.headlineSmall, color = Signal.Ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(subtitle, color = Signal.Muted, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp, bottom = 20.dp))
 
                 content()
 
@@ -290,24 +284,9 @@ private fun AssignmentDialogFrame(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     extraAction?.invoke()
                     Spacer(Modifier.weight(1f))
-                    OutlinedButton(
-                        onClick = onDismiss,
-                        shape = AppDesign.ComponentShape,
-                        border = BorderStroke(2.dp, BorderLight),
-                        modifier = Modifier.height(52.dp)
-                    ) {
-                        Text("Bekor qilish", color = TextMuted, fontWeight = FontWeight.Bold)
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Button(
-                        onClick = onConfirm,
-                        enabled = confirmEnabled,
-                        shape = AppDesign.ComponentShape,
-                        colors = ButtonDefaults.buttonColors(containerColor = AppDesign.Emerald),
-                        modifier = Modifier.height(52.dp)
-                    ) {
-                        Text("Saqlash", fontWeight = FontWeight.Black)
-                    }
+                    SignalButton("Bekor qilish", onClick = onDismiss, style = ButtonStyle.Outlined, height = 42.dp)
+                    Spacer(Modifier.width(8.dp))
+                    SignalButton("Saqlash", onClick = onConfirm, enabled = confirmEnabled, style = ButtonStyle.Primary, height = 42.dp)
                 }
             }
         }
@@ -319,26 +298,27 @@ private fun KindToggle(selected: AssignmentKind, onSelect: (AssignmentKind) -> U
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(52.dp)
+            .height(48.dp)
             .clip(AppDesign.ComponentShape)
-            .background(Color(0xFFF1F5F9))
+            .background(Signal.SurfaceContainer)
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         AssignmentKind.entries.forEach { kind ->
             val isSelected = kind == selected
+            val bg by animateColorAsState(if (isSelected) Signal.Card else Color.Transparent, AppMotion.tweenOrSnap(AppMotion.fast), label = "kindBg")
             Surface(
                 onClick = { onSelect(kind) },
                 modifier = Modifier.weight(1f).fillMaxHeight(),
-                shape = RoundedCornerShape(16.dp),
-                color = if (isSelected) Color.White else Color.Transparent,
-                shadowElevation = if (isSelected) 2.dp else 0.dp
+                shape = AppDesign.SmallShape,
+                color = bg,
+                shadowElevation = if (isSelected) 1.dp else 0.dp
             ) {
                 Row(horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                    val color = if (isSelected) AppDesign.Emerald else TextMuted
-                    Icon(kindIcon(kind), contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
+                    val color = if (isSelected) Signal.Primary else Signal.Muted
+                    Icon(kindIcon(kind), contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text(kind.label, color = color, fontWeight = FontWeight.Black)
+                    Text(kind.label, color = if (isSelected) Signal.Ink else Signal.Muted, style = MaterialTheme.typography.labelLarge)
                 }
             }
         }
@@ -350,7 +330,7 @@ private data class ListItem(val id: Int, val title: String, val subtitle: String
 @Composable
 private fun ItemList(items: List<ListItem>, emptyText: String, selectedId: Int?, onSelect: (Int) -> Unit) {
     if (items.isEmpty()) {
-        Text(emptyText, color = TextMuted, fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 24.dp))
+        Text(emptyText, color = Signal.Muted, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 24.dp))
         return
     }
     LazyColumn(
@@ -361,7 +341,7 @@ private fun ItemList(items: List<ListItem>, emptyText: String, selectedId: Int?,
             SelectableRow(
                 selected = item.id == selectedId,
                 onClick = { onSelect(item.id) },
-                leading = { RadioButton(selected = item.id == selectedId, onClick = null) },
+                leading = { RadioButton(selected = item.id == selectedId, onClick = null, colors = RadioButtonDefaults.colors(selectedColor = Signal.Primary)) },
                 title = item.title,
                 subtitle = item.subtitle
             )
@@ -377,18 +357,20 @@ private fun SelectableRow(
     title: String,
     subtitle: String
 ) {
+    val bg by animateColorAsState(if (selected) Signal.Container else Signal.Surface, AppMotion.tweenOrSnap(AppMotion.fast), label = "rowBg")
+    val border by animateColorAsState(if (selected) Signal.Primary else Signal.Outline, AppMotion.tweenOrSnap(AppMotion.fast), label = "rowBorder")
     Surface(
         modifier = Modifier.fillMaxWidth().clip(AppDesign.ComponentShape).clickable(onClick = onClick),
         shape = AppDesign.ComponentShape,
-        color = if (selected) Color(0xFFECFDF5) else Color(0xFFF8FAFC),
-        border = BorderStroke(2.dp, if (selected) AppDesign.Emerald else BorderLight)
+        color = bg,
+        border = BorderStroke(1.dp, border)
     ) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             leading()
             Spacer(Modifier.width(8.dp))
             Column(Modifier.weight(1f)) {
-                Text(title, color = TextDark, fontWeight = FontWeight.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(subtitle, color = TextMuted, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(title, color = Signal.Ink, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(subtitle, color = Signal.Muted, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
@@ -397,7 +379,7 @@ private fun SelectableRow(
 /** The three lesson modes; options outside [allowed] are shown disabled. */
 @Composable
 fun ModeSelector(selected: LessonMode, allowed: List<LessonMode>, onSelect: (LessonMode) -> Unit) {
-    Text("Rejim", fontWeight = FontWeight.Black, color = TextDark, modifier = Modifier.padding(bottom = 8.dp))
+    Text("Rejim", style = MaterialTheme.typography.labelLarge, color = Signal.Ink, modifier = Modifier.padding(bottom = 8.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         LessonMode.entries.forEach { mode ->
             val enabled = mode in allowed
@@ -405,25 +387,24 @@ fun ModeSelector(selected: LessonMode, allowed: List<LessonMode>, onSelect: (Les
             Surface(
                 onClick = { onSelect(mode) },
                 enabled = enabled,
-                modifier = Modifier.weight(1f).height(48.dp),
+                modifier = Modifier.weight(1f).height(44.dp),
                 shape = AppDesign.ComponentShape,
                 color = when {
-                    isSelected -> AppDesign.Indigo
-                    enabled -> Color.White
-                    else -> Color(0xFFF1F5F9)
+                    isSelected -> Signal.Primary
+                    enabled -> Signal.Card
+                    else -> Signal.SurfaceContainer
                 },
-                border = BorderStroke(2.dp, if (isSelected) AppDesign.Indigo else BorderLight)
+                border = BorderStroke(1.dp, if (isSelected) Signal.Primary else Signal.Outline)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Text(
                         mode.label,
                         color = when {
                             isSelected -> Color.White
-                            enabled -> TextDark
-                            else -> Color(0xFFCBD5E1)
+                            enabled -> Signal.Ink
+                            else -> Signal.Faint
                         },
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.bodyMedium
+                        style = MaterialTheme.typography.labelMedium
                     )
                 }
             }
@@ -432,11 +413,11 @@ fun ModeSelector(selected: LessonMode, allowed: List<LessonMode>, onSelect: (Les
     if (allowed.size == 1) {
         Text(
             "Bu dars faqat \"${allowed.single().label}\" materialidan iborat, shuning uchun rejimni o'zgartirib bo'lmaydi.",
-            color = TextMuted,
+            color = Signal.Muted,
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.padding(top = 6.dp)
         )
     } else if (allowed.isEmpty()) {
-        Text("Avval darsni tanlang.", color = TextMuted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp))
+        Text("Avval darsni tanlang.", color = Signal.Muted, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp))
     }
 }

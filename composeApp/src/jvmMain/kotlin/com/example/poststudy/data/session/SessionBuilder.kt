@@ -1,16 +1,10 @@
 package com.example.poststudy.data.session
 
 import com.example.poststudy.data.network.SessionData
-import com.example.poststudy.data.util.PptConverter
-import com.example.poststudy.data.util.TestParser
 import com.example.poststudy.di.AppContainer
 import com.example.poststudy.domain.model.*
 import java.awt.image.BufferedImage
-import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
 import java.io.File
-import java.util.Base64
-import javax.imageio.ImageIO
 
 /** Everything a student needs to run the session assigned to their group. */
 data class PreparedSession(
@@ -21,7 +15,9 @@ data class PreparedSession(
     val slides: List<BufferedImage>,
     val slideTimerSeconds: Int,
     val testTimerSeconds: Int,
-    val subjectId: Int
+    val subjectId: Int,
+    /** The same slides as base64 JPEG, ready to send; empty when there are no slides. */
+    val encodedSlides: List<String> = emptyList()
 )
 
 /** Builds sessions from group assignments. Blocking: call from Dispatchers.IO. */
@@ -79,21 +75,22 @@ object SessionBuilder {
         testTimerSeconds: Int,
         subjectId: Int
     ): Result<PreparedSession> {
-        val slides = if (mode.hasSlides) {
-            PptConverter.convertSlidesToImages(presentationPath).ifEmpty {
+        val encodedSlides = if (mode.hasSlides) {
+            MaterialCache.encodedSlides(presentationPath).ifEmpty {
                 return failure("'$title' prezentatsiyasini ochib bo'lmadi: ${File(presentationPath).name.ifBlank { "fayl tanlanmagan" }}")
             }
         } else emptyList()
+        val slides = if (mode.hasSlides) MaterialCache.slides(presentationPath) else emptyList()
 
         val questions = if (mode.hasTest) {
-            val parsed = TestParser.parseTest(testPath)
+            val parsed = MaterialCache.questions(testPath)
             if (parsed.error != null) return failure("'$title' test fayli bilan xatolik: ${parsed.error}")
             if (parsed.questions.isEmpty()) return failure("'$title' test faylida savollar topilmadi.")
             prepareQuestions(parsed.questions, questionsPerStudent)
         } else emptyList()
 
         return Result.success(
-            PreparedSession(title, kind, mode, questions, slides, slideTimerSeconds, testTimerSeconds, subjectId)
+            PreparedSession(title, kind, mode, questions, slides, slideTimerSeconds, testTimerSeconds, subjectId, encodedSlides)
         )
     }
 
@@ -120,11 +117,7 @@ fun PreparedSession.toSessionData(): SessionData = SessionData(
     mode = mode,
     subjectId = subjectId,
     kind = kind,
-    encodedSlides = slides.map { img ->
-        val out = ByteArrayOutputStream()
-        ImageIO.write(img, "jpg", out)
-        Base64.getEncoder().encodeToString(out.toByteArray())
-    }
+    encodedSlides = encodedSlides
 )
 
 fun SessionData.toPreparedSession(): PreparedSession = PreparedSession(
@@ -133,13 +126,10 @@ fun SessionData.toPreparedSession(): PreparedSession = PreparedSession(
     mode = mode,
     questions = questions,
     slides = encodedSlides.mapNotNull { base64 ->
-        try {
-            ImageIO.read(ByteArrayInputStream(Base64.getDecoder().decode(base64)))
-        } catch (e: Exception) {
-            null
-        }
+        runCatching { MaterialCache.decode(java.util.Base64.getDecoder().decode(base64)) }.getOrNull()
     },
     slideTimerSeconds = slideTimerSeconds,
     testTimerSeconds = testTimerSeconds,
-    subjectId = subjectId
+    subjectId = subjectId,
+    encodedSlides = encodedSlides
 )

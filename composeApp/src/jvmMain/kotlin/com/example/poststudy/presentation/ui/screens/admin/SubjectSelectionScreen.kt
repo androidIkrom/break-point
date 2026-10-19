@@ -1,40 +1,36 @@
 package com.example.poststudy.presentation.ui.screens.admin
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.outlined.School
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.example.poststudy.presentation.ui.components.BackButton
 import com.example.poststudy.di.AppContainer
 import com.example.poststudy.domain.model.Subject
 import com.example.poststudy.presentation.theme.AppDesign
-import com.example.poststudy.presentation.ui.components.NetworkServerCard
-import com.example.poststudy.presentation.ui.components.PostStudyDialog
-import com.example.poststudy.presentation.ui.components.ThreeStepVerificationDialog
-import com.example.poststudy.presentation.ui.components.hoverEffect
+import com.example.poststudy.presentation.theme.Signal
+import com.example.poststudy.presentation.theme.Space
+import com.example.poststudy.presentation.ui.components.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SubjectSelectionScreen(
     currentSubjectId: Int,
@@ -85,7 +81,7 @@ fun SubjectSelectionScreen(
             warning = "'${subject.name}' fanini o'chirsangiz, undagi barcha darslar, imtihonlar, guruhlar, tinglovchilar va natijalar ham o'chadi. Bu amalni qaytarib bo'lmaydi.",
             confirmWord = subject.name,
             finalButtonText = "O'chirish",
-            color = Color(0xFFDC2626),
+            color = Signal.Danger,
             onDismiss = { subjectToDelete = null },
             onConfirmed = {
                 subjectToDelete = null
@@ -97,76 +93,44 @@ fun SubjectSelectionScreen(
         )
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AppDesign.BackgroundGradient)
-    ) {
-        Scaffold(
-            containerColor = Color.Transparent,
-            topBar = {
-                TopAppBar(
-                    title = { Text("Fanlar boshqaruvi", fontWeight = FontWeight.Black, color = Color(0xFF065F46)) },
-                    navigationIcon = {
-                        BackButton(onClick = onBack)
-                    },
-                    actions = {
-                        Button(
-                            onClick = { showAddDialog = true },
-                            modifier = Modifier.padding(end = 16.dp),
-                            shape = AppDesign.ComponentShape,
-                            colors = ButtonDefaults.buttonColors(containerColor = AppDesign.Emerald)
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Fan qo'shish", fontWeight = FontWeight.Bold)
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-                )
+    Column(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxWidth().height(190.dp)) {
+            SignalBackground(alpha = 0.85f)
+            Column(Modifier.fillMaxSize().padding(horizontal = Space.page, vertical = 16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    BackButton(onClick = onBack, onDark = true, modifier = Modifier.padding(start = 0.dp))
+                    Text("Fanlar boshqaruvi", style = MaterialTheme.typography.titleLarge, color = Signal.OnDark)
+                    Spacer(Modifier.weight(1f))
+                    SignalButton("Fan qo'shish", onClick = { showAddDialog = true }, icon = Icons.Default.Add, style = ButtonStyle.Cyan, height = 40.dp)
+                }
+                Spacer(Modifier.weight(1f))
+                Eyebrow("Admin", color = Signal.Amber)
+                Text("Fanni tanlang", style = MaterialTheme.typography.displaySmall, color = Signal.OnDark)
+                Text("Boshqarishni davom ettirish uchun fanni tanlang. Darslar, guruhlar va natijalar fanga bog'liq.", style = MaterialTheme.typography.bodyMedium, color = Signal.OnDarkMuted)
             }
-        ) { padding ->
-            // One scrolling list: the header scrolls away with the cards on small screens
+        }
+        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
             LazyVerticalGrid(
-                columns = GridCells.Adaptive(300.dp),
-                modifier = Modifier.fillMaxSize().padding(padding),
-                horizontalArrangement = Arrangement.spacedBy(24.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp),
-                contentPadding = PaddingValues(start = 32.dp, end = 32.dp, top = 8.dp, bottom = 48.dp)
+                columns = GridCells.Adaptive(280.dp),
+                modifier = Modifier.widthIn(max = Space.contentMaxWidth + Space.page * 2).fillMaxSize(),
+                horizontalArrangement = Arrangement.spacedBy(Space.l),
+                verticalArrangement = Arrangement.spacedBy(Space.l),
+                contentPadding = PaddingValues(horizontal = Space.page, vertical = Space.xl)
             ) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                        Text(
-                            text = "Fanlarni tanlash",
-                            style = MaterialTheme.typography.displaySmall,
-                            fontWeight = FontWeight.Black,
-                            color = Color(0xFF059669),
-                            textAlign = TextAlign.Center
-                        )
-                        NetworkServerCard(modifier = Modifier.padding(top = 16.dp).widthIn(max = 900.dp).fillMaxWidth())
-                        Text(
-                            text = "Boshqarishni davom ettirish uchun fanni tanlang",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = Color(0xFF64748B),
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
-                        )
-                    }
+                    NetworkServerCard(modifier = Modifier.fillMaxWidth())
                 }
-
                 if (isLoading) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Box(Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = AppDesign.Emerald)
+                            CircularProgressIndicator(color = Signal.Primary, trackColor = Signal.Container)
                         }
                     }
                 } else {
                     itemsIndexed(subjects, key = { _, s -> s.id }) { index, subject ->
                         SubjectSelectionCard(
-                            title = subject.name,
-                            subtitle = if (subject.id == currentSubjectId) "Hozirgi tanlangan" else "Boshqarish uchun tanlang",
-                            icon = Icons.AutoMirrored.Filled.List,
-                            color = AppDesign.RainbowPalette[index % AppDesign.RainbowPalette.size],
+                            subject = subject,
+                            index = index,
                             isPrimary = subject.id == currentSubjectId,
                             // The app always needs at least one subject
                             canDelete = subjects.size > 1,
@@ -175,6 +139,7 @@ fun SubjectSelectionScreen(
                             onDelete = { subjectToDelete = subject }
                         )
                     }
+                    item { AddCard("Yangi fan", "Alohida darslar, guruhlar va natijalar bilan", onClick = { showAddDialog = true }) }
                 }
             }
         }
@@ -185,6 +150,8 @@ fun SubjectSelectionScreen(
 private fun SubjectNameDialog(title: String, initialName: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
     var name by remember { mutableStateOf(initialName) }
     var error by remember { mutableStateOf(false) }
+    val fieldFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { fieldFocus.requestFocus() } }
     PostStudyDialog(
         onDismissRequest = onDismiss,
         title = title,
@@ -204,84 +171,46 @@ private fun SubjectNameDialog(title: String, initialName: String, onDismiss: () 
                 supportingText = if (error) {
                     { Text("Fan nomini kiriting") }
                 } else null,
-                modifier = Modifier.fillMaxWidth(),
-                shape = AppDesign.ComponentShape
+                modifier = Modifier.fillMaxWidth().focusRequester(fieldFocus),
+                shape = AppDesign.SmallShape
             )
         }
     )
 }
 
 @Composable
-fun SubjectSelectionCard(
-    title: String,
-    subtitle: String,
-    icon: ImageVector,
-    color: Color,
+private fun SubjectSelectionCard(
+    subject: Subject,
+    index: Int,
     isPrimary: Boolean,
     canDelete: Boolean,
     onClick: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
-    Surface(
+    SignalCard(
+        modifier = Modifier.fillMaxWidth().heightIn(min = 240.dp),
         onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 220.dp)
-            .hoverEffect(scale = 1.03f, yOffset = -6f),
-        shape = AppDesign.ComponentShape,
-        color = Color.White,
-        border = BorderStroke(if (isPrimary) 5.dp else 3.dp, color.copy(alpha = if (isPrimary) 1f else 0.6f)),
-        shadowElevation = if (isPrimary) 16.dp else 8.dp
+        padding = 0.dp,
+        borderColor = if (isPrimary) Signal.Primary else Signal.Outline
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                IconButton(onClick = onEdit) {
-                    Icon(Icons.Default.Edit, contentDescription = "Tahrirlash", tint = color)
-                }
+        LessonCover(index + 3, Modifier.fillMaxWidth().height(96.dp)) {
+            Row(Modifier.fillMaxSize().padding(12.dp), verticalAlignment = Alignment.Top) {
+                if (isPrimary) StatusChip("Hozirgi fan", Signal.Cyan, Signal.Dark, icon = Icons.Default.Check, iconTint = Signal.Dark)
+                Spacer(Modifier.weight(1f))
+                SignalIconButton(Icons.Default.Edit, "Tahrirlash", onEdit, tint = Color.White, container = Color.White.copy(alpha = 0.14f), borderColor = Color.White.copy(alpha = 0.2f), size = 32.dp, iconSize = 15.dp, onDark = true)
                 if (canDelete) {
-                    IconButton(onClick = onDelete) {
-                        Icon(Icons.Default.Delete, contentDescription = "O'chirish", tint = Color(0xFFDC2626))
-                    }
+                    Spacer(Modifier.width(6.dp))
+                    SignalIconButton(Icons.Default.Delete, "O'chirish", onDelete, tint = Color.White, container = Signal.Danger.copy(alpha = 0.5f), borderColor = null, size = 32.dp, iconSize = 15.dp, onDark = true)
                 }
             }
-
-            Box(
-                modifier = Modifier
-                    .size(if (isPrimary) 84.dp else 76.dp)
-                    .background(color.copy(alpha = 0.1f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(if (isPrimary) 40.dp else 34.dp))
+        }
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(Icons.Outlined.School, contentDescription = null, tint = Signal.Primary, modifier = Modifier.size(20.dp))
+                Text(subject.name, style = MaterialTheme.typography.titleLarge, color = Signal.Ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Text(
-                text = title,
-                style = if (isPrimary) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Black,
-                color = color,
-                textAlign = TextAlign.Center,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (isPrimary) color else Color(0xFF64748B),
-                fontWeight = if (isPrimary) FontWeight.Black else FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
+            Text(if (isPrimary) "Hozir tanlangan · ochish" else "Boshqarish uchun tanlang", style = MaterialTheme.typography.bodySmall, color = if (isPrimary) Signal.Primary else Signal.Muted)
         }
     }
 }

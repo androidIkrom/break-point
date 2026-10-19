@@ -311,7 +311,8 @@ object NetworkManager {
                     }
                 }
             }
-            executor = Executors.newCachedThreadPool()
+            // Bounded: a flood of requests queues instead of spawning a thread each
+            executor = Executors.newFixedThreadPool(24)
             start()
         }
 

@@ -10,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import com.example.poststudy.presentation.theme.Signal
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -25,9 +26,9 @@ fun PasswordReveal(
 ) {
     if (password.isNullOrEmpty()) {
         Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.LockOpen, contentDescription = null, tint = Color(0xFFEF4444), modifier = Modifier.size(18.dp))
+            Icon(Icons.Default.LockOpen, contentDescription = null, tint = Signal.Warning, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
-            Text("Parol yo'q", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold, style = style)
+            Text("Parol yo'q", color = Signal.Warning, fontWeight = FontWeight.Bold, style = style)
         }
         return
     }
@@ -38,7 +39,7 @@ fun PasswordReveal(
             style = style,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Bold,
-            color = Color(0xFF1E293B),
+            color = Signal.Ink,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f, fill = false)
@@ -47,7 +48,7 @@ fun PasswordReveal(
             Icon(
                 if (visible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                 contentDescription = if (visible) "Yashirish" else "Ko'rsatish",
-                tint = Color(0xFF64748B),
+                tint = Signal.Muted,
                 modifier = Modifier.size(20.dp)
             )
         }

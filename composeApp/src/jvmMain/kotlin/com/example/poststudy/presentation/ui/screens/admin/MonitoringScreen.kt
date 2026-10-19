@@ -1,6 +1,6 @@
 package com.example.poststudy.presentation.ui.screens.admin
 
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.TooltipArea
 import androidx.compose.foundation.TooltipPlacement
@@ -8,19 +8,21 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.RemoveCircleOutline
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
@@ -28,7 +30,10 @@ import androidx.compose.ui.unit.dp
 import com.example.poststudy.di.AppContainer
 import com.example.poststudy.domain.model.*
 import com.example.poststudy.presentation.theme.AppDesign
-import com.example.poststudy.presentation.ui.components.BackButton
+import com.example.poststudy.presentation.theme.AppMotion
+import com.example.poststudy.presentation.theme.Signal
+import com.example.poststudy.presentation.theme.Space
+import com.example.poststudy.presentation.ui.components.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -36,32 +41,24 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private val Ink = Color(0xFF1E293B)
-private val InkMuted = Color(0xFF64748B)
-private val Grid = Color(0xFFE2E8F0)
-private val Track = Color(0xFFF1F5F9)
-// Single series: one hue for every bar; status colors are only used next to icons and labels
-private val BarColor = Color(0xFF6366F1)
-
-private fun levelColor(level: PerformanceLevel): Color = when (level) {
-    PerformanceLevel.Excellent -> Color(0xFF059669)
-    PerformanceLevel.Good -> Color(0xFFB45309)
-    PerformanceLevel.Low -> Color(0xFFDC2626)
-    PerformanceLevel.NoData -> Color(0xFF94A3B8)
+private fun levelColors(level: PerformanceLevel): Triple<Color, Color, Color> = when (level) {
+    PerformanceLevel.Excellent -> Triple(Signal.SuccessContainer, Signal.OnSuccessContainer, Signal.Success)
+    PerformanceLevel.Good -> Triple(Signal.WarningContainer, Signal.OnWarningContainer, Signal.Warning)
+    PerformanceLevel.Low -> Triple(Signal.DangerContainer, Signal.OnDangerContainer, Signal.Danger)
+    PerformanceLevel.NoData -> Triple(Signal.SurfaceContainer, Signal.Muted, Signal.Faint)
 }
 
 private fun levelIcon(level: PerformanceLevel): ImageVector = when (level) {
-    PerformanceLevel.Excellent -> Icons.Default.CheckCircle
-    PerformanceLevel.Good -> Icons.Default.Info
-    PerformanceLevel.Low -> Icons.Default.Warning
-    PerformanceLevel.NoData -> Icons.Default.RemoveCircleOutline
+    PerformanceLevel.Excellent -> Icons.Outlined.CheckCircle
+    PerformanceLevel.Good -> Icons.Outlined.Info
+    PerformanceLevel.Low -> Icons.Outlined.WarningAmber
+    PerformanceLevel.NoData -> Icons.Outlined.RemoveCircleOutline
 }
 
 private val dateFormat = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
 
 private fun pct(value: Int?): String = value?.let { "$it%" } ?: "—"
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MonitoringScreen(subjectId: Int, onBack: () -> Unit) {
     var groups by remember { mutableStateOf<List<Group>>(emptyList()) }
@@ -85,67 +82,47 @@ fun MonitoringScreen(subjectId: Int, onBack: () -> Unit) {
     val overall = remember(loaded, selectedGroup) { Statistics.overall(scoped) }
     val byGroups = selectedGroup == null
 
-    Box(Modifier.fillMaxSize().background(AppDesign.BackgroundGradient)) {
-        Scaffold(
-            containerColor = Color.Transparent,
-            topBar = {
-                TopAppBar(
-                    title = { Text("Monitoring markazi", fontWeight = FontWeight.Black, color = Color(0xFF065F46)) },
-                    navigationIcon = { BackButton(onClick = onBack) },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-                )
+    AdminPage(
+        title = "Monitoring markazi",
+        eyebrow = "Ta'lim tahlili",
+        subtitle = if (byGroups) "Barcha guruhlar bo'yicha" else "${selectedGroup?.name} guruhi tinglovchilari",
+        actions = { GroupFilter(groups, selectedGroup, onSelect = { selectedGroup = it }) }
+    ) {
+        if (loaded == null) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Signal.Primary, trackColor = Signal.Container)
             }
-        ) { padding ->
-            if (loaded == null) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = BarColor)
-                }
-                return@Scaffold
-            }
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(horizontal = 32.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                item {
-                    Row(
-                        Modifier.widthIn(max = 1200.dp).fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text("Ta'lim tahlili", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black, color = Ink)
-                            Text(
-                                if (byGroups) "Barcha guruhlar bo'yicha" else "${selectedGroup?.name} guruhi tinglovchilari",
-                                color = InkMuted
-                            )
-                        }
-                        GroupFilter(groups, selectedGroup, onSelect = { selectedGroup = it })
-                    }
-                }
+            return@AdminPage
+        }
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = Space.page, vertical = Space.xl),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
+        ) {
+            item { StatTiles(overall, Modifier.fillMaxWidth()) }
 
-                item { StatTiles(overall, Modifier.widthIn(max = 1200.dp).fillMaxWidth()) }
-
-                item {
-                    Section(
+            item {
+                SignalCard(padding = 22.dp) {
+                    SectionTitle(
                         title = if (byGroups) "Guruhlar reytingi" else "Tinglovchilar reytingi",
-                        subtitle = "O'rtacha natija, %",
-                        modifier = Modifier.widthIn(max = 1200.dp).fillMaxWidth()
-                    ) {
-                        RankingBars(rows, byGroups)
-                    }
+                        subtitle = "O'rtacha natija, %. Ustiga olib boring: eng yaxshi, eng past, urinishlar."
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    RankingBars(rows, byGroups)
                 }
+            }
 
-                item {
-                    Section(
-                        title = "Batafsil jadval",
-                        subtitle = if (byGroups) "Guruhni tanlab, tinglovchilar natijasini ko'ring" else null,
-                        modifier = Modifier.widthIn(max = 1200.dp).fillMaxWidth()
-                    ) {
-                        PerformanceTable(rows, byGroups, onGroupClick = { key ->
-                            groups.firstOrNull { "group:${it.id}" == key }?.let { selectedGroup = it }
-                        })
+            item {
+                SignalCard(padding = 0.dp) {
+                    Box(Modifier.padding(start = 22.dp, end = 22.dp, top = 18.dp, bottom = 10.dp)) {
+                        SectionTitle(
+                            title = "Batafsil jadval",
+                            subtitle = if (byGroups) "Guruhni tanlab, tinglovchilar natijasini ko'ring" else null
+                        )
                     }
+                    PerformanceTable(rows, byGroups, onGroupClick = { key ->
+                        groups.firstOrNull { "group:${it.id}" == key }?.let { selectedGroup = it }
+                    })
                 }
             }
         }
@@ -156,21 +133,9 @@ fun MonitoringScreen(subjectId: Int, onBack: () -> Unit) {
 private fun GroupFilter(groups: List<Group>, selected: Group?, onSelect: (Group?) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
-        OutlinedButton(onClick = { open = true }, shape = RoundedCornerShape(12.dp)) {
-            Icon(Icons.Default.FilterList, contentDescription = null, tint = Ink)
-            Spacer(Modifier.width(8.dp))
-            Text(
-                selected?.name ?: "Barcha guruhlar",
-                color = Ink,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 200.dp)
-            )
-            Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = Ink)
-        }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            DropdownMenuItem(text = { Text("Barcha guruhlar", fontWeight = FontWeight.Bold) }, onClick = { onSelect(null); open = false })
+        SignalButton(selected?.name ?: "Barcha guruhlar", onClick = { open = true }, style = ButtonStyle.Outlined, trailingIcon = Icons.Default.KeyboardArrowDown, height = 42.dp)
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, shape = AppDesign.ComponentShape) {
+            DropdownMenuItem(text = { Text("Barcha guruhlar") }, onClick = { onSelect(null); open = false })
             groups.forEach { g ->
                 DropdownMenuItem(text = { Text(g.name) }, onClick = { onSelect(g); open = false })
             }
@@ -181,32 +146,27 @@ private fun GroupFilter(groups: List<Group>, selected: Group?, onSelect: (Group?
 @Composable
 private fun StatTiles(overall: PerformanceRow, modifier: Modifier) {
     val level = PerformanceLevel.of(overall.average)
+    val (lvBg, lvFg, lvIcon) = levelColors(level)
     BoxWithConstraints(modifier) {
         val columns = if (maxWidth < 700.dp) 2 else 4
-        val tiles = listOf(
-            Triple("O'rtacha natija", pct(overall.average), level),
-            Triple("Urinishlar", overall.attempts.toString(), null),
-            Triple("Tinglovchilar", overall.students.toString(), null),
-            Triple("Eng yaxshi natija", pct(overall.best), null)
-        )
-        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            tiles.chunked(columns).forEach { rowTiles ->
-                Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    rowTiles.forEach { (label, value, tileLevel) ->
-                        Surface(
-                            modifier = Modifier.weight(1f).fillMaxHeight(),
-                            shape = AppDesign.ComponentShape,
-                            color = Color.White,
-                            border = BorderStroke(1.dp, Grid),
-                            shadowElevation = 2.dp
-                        ) {
-                            Column(Modifier.padding(20.dp)) {
-                                Text(label, color = InkMuted, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text(value, color = Ink, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
-                                if (tileLevel != null) StatusChip(tileLevel)
-                            }
-                        }
+        val tiles: List<@Composable (Modifier) -> Unit> = listOf(
+            { m ->
+                Surface(modifier = m, shape = AppDesign.CardShape, color = Color.Transparent) {
+                    Column(Modifier.background(Signal.GradientHeroTeal).padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("O'rtacha natija", style = MaterialTheme.typography.bodySmall, color = Signal.OnDarkMuted)
+                        Text(pct(overall.average), style = MaterialTheme.typography.displaySmall, color = Signal.OnDark)
+                        StatusChip(level.label, lvBg, lvFg, icon = levelIcon(level), iconTint = lvIcon)
                     }
+                }
+            },
+            { m -> KpiTile("Urinishlar", overall.attempts.toString(), m, note = "Jami topshirilgan testlar") },
+            { m -> KpiTile("Tinglovchilar", overall.students.toString(), m, note = "Natijasi bor tinglovchilar") },
+            { m -> KpiTile("Eng yaxshi natija", pct(overall.best), m, note = "Eng past: ${pct(overall.worst)}", container = Signal.WarningContainer, contentColor = Signal.OnWarningContainer) }
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            tiles.chunked(columns).forEach { rowTiles ->
+                Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    rowTiles.forEach { tile -> tile(Modifier.weight(1f).fillMaxHeight()) }
                     repeat(columns - rowTiles.size) { Spacer(Modifier.weight(1f)) }
                 }
             }
@@ -214,25 +174,7 @@ private fun StatTiles(overall: PerformanceRow, modifier: Modifier) {
     }
 }
 
-@Composable
-private fun Section(title: String, subtitle: String?, modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Surface(
-        modifier = modifier,
-        shape = AppDesign.CardShape,
-        color = Color.White,
-        border = BorderStroke(1.dp, Grid),
-        shadowElevation = 4.dp
-    ) {
-        Column(Modifier.padding(24.dp)) {
-            Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = Ink)
-            if (subtitle != null) Text(subtitle, color = InkMuted, style = MaterialTheme.typography.bodyMedium)
-            Spacer(Modifier.height(16.dp))
-            content()
-        }
-    }
-}
-
-/** Horizontal bars: names stay readable however long they are. */
+/** Horizontal bars that grow in; names stay readable however long they are. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun RankingBars(rows: List<PerformanceRow>, byGroups: Boolean) {
@@ -241,18 +183,18 @@ private fun RankingBars(rows: List<PerformanceRow>, byGroups: Boolean) {
         EmptyNote("Hali natijalar yo'q")
         return
     }
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         withData.forEachIndexed { index, row ->
             TooltipArea(
                 tooltip = {
-                    Surface(shape = RoundedCornerShape(10.dp), color = Ink, shadowElevation = 6.dp) {
-                        Column(Modifier.padding(12.dp)) {
-                            Text(row.name, color = Color.White, fontWeight = FontWeight.Bold)
-                            Text("O'rtacha: ${pct(row.average)}", color = Color.White)
-                            Text("Eng yaxshi: ${pct(row.best)} • Eng past: ${pct(row.worst)}", color = Color.White)
+                    Surface(shape = AppDesign.SmallShape, color = Signal.Dark, shadowElevation = 8.dp) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(row.name, color = Signal.OnDark, style = MaterialTheme.typography.titleSmall)
+                            Text("O'rtacha: ${pct(row.average)}", color = Signal.OnDarkMuted, style = MaterialTheme.typography.bodySmall)
+                            Text("Eng yaxshi: ${pct(row.best)} • Eng past: ${pct(row.worst)}", color = Signal.OnDarkMuted, style = MaterialTheme.typography.bodySmall)
                             Text(
                                 if (byGroups) "Tinglovchilar: ${row.students} • Urinishlar: ${row.attempts}" else "Urinishlar: ${row.attempts}",
-                                color = Color.White
+                                color = Signal.OnDarkMuted, style = MaterialTheme.typography.bodySmall
                             )
                         }
                     }
@@ -260,40 +202,40 @@ private fun RankingBars(rows: List<PerformanceRow>, byGroups: Boolean) {
                 tooltipPlacement = TooltipPlacement.CursorPoint(offset = DpOffset(12.dp, 12.dp))
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("${index + 1}", color = InkMuted, fontWeight = FontWeight.Bold, modifier = Modifier.width(28.dp))
-                    Text(
-                        row.name,
-                        color = Ink,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.width(220.dp)
-                    )
+                    Box(
+                        Modifier.size(24.dp).background(if (index == 0) Signal.Amber else Signal.SurfaceContainer, AppDesign.PillShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("${index + 1}", style = MaterialTheme.typography.labelMedium, color = if (index == 0) Signal.Dark else Signal.Muted)
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Text(row.name, color = Signal.Ink, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.width(180.dp))
                     Spacer(Modifier.width(12.dp))
-                    BoxWithConstraints(Modifier.weight(1f).height(22.dp).clip(RoundedCornerShape(4.dp)).background(Track)) {
-                        val fraction = (row.average ?: 0) / 100f
+                    val fraction = (row.average ?: 0) / 100f
+                    val animated by animateFloatAsState(fraction.coerceIn(0f, 1f), AppMotion.tweenOrSnap(900, AppMotion.decelerateEasing), label = "bar")
+                    Box(Modifier.weight(1f).height(14.dp).clip(RoundedCornerShape(0.dp, 6.dp, 6.dp, 0.dp)).background(Signal.SurfaceContainer)) {
                         Box(
                             Modifier
                                 .fillMaxHeight()
-                                .width(maxWidth * fraction.coerceIn(0f, 1f))
-                                .clip(RoundedCornerShape(topEnd = 4.dp, bottomEnd = 4.dp))
-                                .background(BarColor)
+                                .fillMaxWidth(animated)
+                                .clip(RoundedCornerShape(0.dp, 6.dp, 6.dp, 0.dp))
+                                .background(if (index == 0) Brush.horizontalGradient(listOf(Signal.Primary, Signal.Cyan)) else Brush.horizontalGradient(listOf(Signal.Primary, Signal.Primary)))
                         )
                     }
                     Spacer(Modifier.width(12.dp))
-                    Text(pct(row.average), color = Ink, fontWeight = FontWeight.Black, textAlign = TextAlign.End, modifier = Modifier.width(56.dp))
+                    Text(pct(row.average), color = Signal.Ink, style = MaterialTheme.typography.titleSmall, textAlign = TextAlign.End, modifier = Modifier.width(52.dp))
                 }
             }
         }
         // Scale reference under the bars
         Row {
-            Spacer(Modifier.width(28.dp + 220.dp + 12.dp))
+            Spacer(Modifier.width(24.dp + 10.dp + 180.dp + 12.dp))
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.SpaceBetween) {
                 listOf("0%", "25%", "50%", "75%", "100%").forEach {
-                    Text(it, color = InkMuted, style = MaterialTheme.typography.labelSmall)
+                    Text(it, color = Signal.Muted, style = MaterialTheme.typography.bodySmall)
                 }
             }
-            Spacer(Modifier.width(12.dp + 56.dp))
+            Spacer(Modifier.width(12.dp + 52.dp))
         }
     }
 }
@@ -321,25 +263,15 @@ private fun PerformanceTable(rows: List<PerformanceRow>, byGroups: Boolean, onGr
     }
 
     Column {
-        Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Track).padding(horizontal = 16.dp, vertical = 12.dp)
-        ) {
+        Row(Modifier.fillMaxWidth().background(Signal.SurfaceContainer).padding(horizontal = 22.dp, vertical = 10.dp)) {
             columns.forEach { c ->
-                Text(
-                    c.title,
-                    modifier = Modifier.weight(c.weight).padding(horizontal = 4.dp),
-                    color = Color(0xFF475569),
-                    fontWeight = FontWeight.Black,
-                    style = MaterialTheme.typography.labelLarge,
-                    textAlign = c.align,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Text(c.title.uppercase(), modifier = Modifier.weight(c.weight).padding(horizontal = 4.dp), color = Signal.Muted, style = MaterialTheme.typography.labelSmall, textAlign = c.align, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
         rows.forEachIndexed { index, row ->
-            if (index > 0) HorizontalDivider(color = Track)
+            if (index > 0) HorizontalDivider(color = Signal.SurfaceContainer)
             val level = PerformanceLevel.of(row.average)
+            val (lvBg, lvFg, lvIcon) = levelColors(level)
             val cells: List<String> = if (byGroups) {
                 listOf(row.name, row.students.toString(), row.attempts.toString(), pct(row.average), pct(row.best), pct(row.worst))
             } else {
@@ -348,46 +280,31 @@ private fun PerformanceTable(rows: List<PerformanceRow>, byGroups: Boolean, onGr
                     row.lastTimestamp?.let { dateFormat.format(Date(it)) } ?: "—"
                 )
             }
-            val rowModifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).let {
-                if (byGroups) it.then(Modifier.clickableRow { onGroupClick(row.key) }) else it
-            }
-            Row(rowModifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            val rowModifier = Modifier.fillMaxWidth().let { if (byGroups) it.clickable { onGroupClick(row.key) } else it }
+            Row(rowModifier.padding(horizontal = 22.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 cells.forEachIndexed { i, text ->
                     Text(
                         text,
                         modifier = Modifier.weight(columns[i].weight).padding(horizontal = 4.dp),
-                        color = Ink,
-                        fontWeight = if (i == 0) FontWeight.Bold else FontWeight.Normal,
+                        color = Signal.Ink,
+                        style = if (i == 0) MaterialTheme.typography.titleSmall else MaterialTheme.typography.bodyMedium,
                         textAlign = columns[i].align,
                         maxLines = if (i == 0) 2 else 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                Box(Modifier.weight(columns.last().weight).padding(horizontal = 4.dp)) { StatusChip(level) }
+                Box(Modifier.weight(columns.last().weight).padding(horizontal = 4.dp)) {
+                    StatusChip(level.label, lvBg, lvFg, icon = levelIcon(level), iconTint = lvIcon)
+                }
             }
         }
-    }
-}
-
-private fun Modifier.clickableRow(onClick: () -> Unit): Modifier = this.clickable(onClick = onClick)
-
-@Composable
-private fun StatusChip(level: PerformanceLevel) {
-    val color = levelColor(level)
-    Row(
-        Modifier.clip(CircleShape).background(color.copy(alpha = 0.1f)).padding(horizontal = 10.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(levelIcon(level), contentDescription = null, tint = color, modifier = Modifier.size(16.dp))
-        Spacer(Modifier.width(4.dp))
-        // Label text stays in ink, the icon carries the color
-        Text(level.label, color = Ink, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, maxLines = 1)
+        Spacer(Modifier.height(8.dp))
     }
 }
 
 @Composable
 private fun EmptyNote(text: String) {
     Box(Modifier.fillMaxWidth().height(96.dp), contentAlignment = Alignment.Center) {
-        Text(text, color = InkMuted)
+        Text(text, color = Signal.Muted, style = MaterialTheme.typography.bodyMedium)
     }
 }

@@ -1,17 +1,10 @@
 package com.example.poststudy.presentation.ui.screens.student
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Quiz
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.*
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -19,18 +12,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.foundation.focusable
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.example.poststudy.presentation.ui.components.BackButton
 import com.example.poststudy.domain.model.LessonMode
-import com.example.poststudy.presentation.theme.AppDesign
-import com.example.poststudy.presentation.ui.components.hoverEffect
+import com.example.poststudy.presentation.theme.Signal
+import com.example.poststudy.presentation.theme.Space
+import com.example.poststudy.presentation.ui.components.*
+import com.example.poststudy.presentation.ui.screens.groups.StudentSteps
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StudentIntroScreen(
     title: String,
@@ -46,215 +37,90 @@ fun StudentIntroScreen(
     onBack: () -> Unit
 ) {
     val focusRequester = remember { FocusRequester() }
+    val parallax = rememberParallax()
 
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
-    }
+    LaunchedEffect(Unit) { runCatching { focusRequester.requestFocus() } }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(AppDesign.BackgroundGradient)
-    ) {
-        // Decorative background elements
-        Box(
-            modifier = Modifier
-                .size(600.dp)
-                .offset(x = (-200).dp, y = (-200).dp)
-                .background(Color.White.copy(alpha = 0.07f), CircleShape)
-        )
-
-        Scaffold(
-            containerColor = Color.Transparent,
-            modifier = Modifier
-                .focusRequester(focusRequester)
-                .onPreviewKeyEvent {
-                    if ((it.key == Key.Enter || it.key == Key.DirectionRight) && it.type == KeyEventType.KeyDown) {
-                        onStart()
-                        true
-                    } else false
-                },
-            topBar = {
-                CenterAlignedTopAppBar(
-                    title = {
-                        Text(
-                            title.ifBlank { if (isExam) "Imtihon brifingi" else "Mashg'ulot brifingi" },
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Black,
-                            color = Color(0xFF065F46)
-                        )
-                    },
-                    navigationIcon = {
-                        BackButton(onClick = onBack)
-                    },
-                    actions = {
-                        IconButton(onClick = onRefresh) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Yangilash", tint = Color(0xFF10B981))
-                        }
-                    },
-                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Transparent)
-                )
+            .parallaxSource(parallax)
+            .focusRequester(focusRequester)
+            .focusable()
+            .onPreviewKeyEvent {
+                if ((it.key == Key.Enter || it.key == Key.DirectionRight) && it.type == KeyEventType.KeyDown) {
+                    onStart()
+                    true
+                } else false
             }
-        ) { paddingValues ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .padding(horizontal = 32.dp)
-                    .verticalScroll(rememberScrollState()),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Spacer(modifier = Modifier.height(24.dp))
+    ) {
+        SignalBackground(parallax = parallax.value)
 
-                Card(
-                    modifier = Modifier.widthIn(max = 650.dp).padding(bottom = 32.dp).hoverEffect(),
-                    shape = AppDesign.CardShape,
-                    colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.95f)),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 16.dp),
-                    border = BorderStroke(2.dp, Color(0xFF4F46E5).copy(alpha = 0.2f))
-                ) {
-                    Column(
-                        modifier = Modifier.padding(48.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(80.dp)
-                                .background(Color(0xFF4F46E5).copy(alpha = 0.1f), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Info,
-                                contentDescription = null,
-                                tint = Color(0xFF4F46E5),
-                                modifier = Modifier.size(40.dp)
-                            )
-                        }
+        Row(Modifier.fillMaxWidth().padding(horizontal = Space.page, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            BackButton(onClick = onBack, onDark = true, modifier = Modifier.padding(start = 0.dp))
+            Spacer(Modifier.weight(1f))
+            StepHeader(StudentSteps, 2, onDark = true)
+            Spacer(Modifier.width(16.dp))
+            SignalIconButton(Icons.Outlined.Refresh, "Yangilash", onRefresh, tint = Signal.OnDark, container = Signal.GlassFill, borderColor = Signal.GlassBorderStrong, size = 40.dp, iconSize = 18.dp, onDark = true)
+        }
 
-                        Spacer(modifier = Modifier.height(32.dp))
+        ScrollableCentered(Modifier.fillMaxSize().padding(horizontal = Space.page, vertical = 72.dp)) {
+            GlassCard(Modifier.widthIn(max = 640.dp).fillMaxWidth(), padding = 32.dp) {
+                val kindLabel = if (isExam) "Imtihon" else "Dars · ${mode.label}"
+                StatusChip(
+                    text = listOf(groupName, kindLabel).filter { it.isNotBlank() }.joinToString(" · "),
+                    container = Signal.Amber.copy(alpha = 0.18f),
+                    contentColor = Signal.Amber
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    title.ifBlank { if (isExam) "Imtihon brifingi" else "Mashg'ulot brifingi" },
+                    style = MaterialTheme.typography.displaySmall,
+                    color = Signal.OnDark
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = when {
+                        isExam -> "Imtihonga tayyorlaning. Bu sizning bilimingizni bevosita tekshirishdir."
+                        mode == LessonMode.ReAppropriation -> "Mashg'ulotga tayyorlaning. Avval taqdimotni o'rganasiz, so'ngra test topshirasiz."
+                        mode == LessonMode.PresentationOnly -> "Taqdimotni diqqat bilan o'rganing. Bu mashg'ulotda test yo'q."
+                        else -> "Test topshirishga tayyorlaning. Test boshlangach taymer ishlaydi, vaqt tugaganda javoblar avtomatik yuboriladi."
+                    },
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Signal.OnDarkMuted
+                )
+                Spacer(Modifier.height(24.dp))
 
-                        if (groupName.isNotBlank()) {
-                            Text(
-                                text = "$groupName • ${if (isExam) "Imtihon" else mode.label}",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = Color(0xFF4F46E5),
-                                fontWeight = FontWeight.Black,
-                                modifier = Modifier.padding(bottom = 12.dp)
-                            )
-                        }
-                        Text(
-                            text = when {
-                                isExam -> "Imtihonga tayyorlaning. Bu sizning bilimingizni bevosita tekshirishdir."
-                                mode == LessonMode.ReAppropriation ->
-                                    "Mashg'ulotga tayyorlaning. Avval taqdimotni o'rganasiz, so'ngra test topshirasiz."
-                                mode == LessonMode.PresentationOnly ->
-                                    "Taqdimotni diqqat bilan o'rganing. Bu mashg'ulotda test yo'q."
-                                else -> "Test topshirishga tayyorlaning."
-                            },
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = Color(0xFF64748B),
-                            textAlign = TextAlign.Center,
-                            fontWeight = FontWeight.Medium
-                        )
-
-                        Spacer(modifier = Modifier.height(40.dp))
-
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(20.dp)
-                        ) {
-                            if (mode.hasSlides) {
-                                IntroRow(
-                                    icon = Icons.AutoMirrored.Filled.MenuBook,
-                                    label = "O'rganish bosqichi:",
-                                    value = "$totalSlides slayd",
-                                    subValue = "${slideTimerSeconds / 60} daqiqa",
-                                    color = Color(0xFFFACC15)
-                                )
-                            }
-
-                            if (mode.hasTest) IntroRow(
-                                icon = Icons.Default.Quiz,
-                                label = "Test bosqichi:",
-                                value = "$totalQuestions savol",
-                                subValue = "${testTimerSeconds / 60} daqiqa",
-                                color = Color(0xFF4ADE80)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(48.dp))
-
-                        Button(
-                            onClick = onStart,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(64.dp)
-                                .hoverEffect(),
-                            shape = AppDesign.ComponentShape,
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4F46E5)),
-                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)
-                        ) {
-                            Text("BOSHLASH", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black)
-                        }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (mode.hasSlides) {
+                        KpiTile("Slaydlar", "$totalSlides ta", Modifier.weight(1f), note = "${slideTimerSeconds / 60} daqiqa", onDark = true)
+                    }
+                    if (mode.hasTest) {
+                        KpiTile("Savollar", "$totalQuestions ta", Modifier.weight(1f), note = "${testTimerSeconds / 60} daqiqa", onDark = true, valueColor = Signal.Cyan)
                     }
                 }
 
-                Spacer(modifier = Modifier.height(40.dp))
-            }
-        }
-    }
-}
-
-@Composable
-fun IntroRow(
-    icon: ImageVector,
-    label: String,
-    value: String,
-    subValue: String,
-    color: Color
-) {
-    Surface(
-        color = Color(0xFFF8FAFC),
-        shape = AppDesign.ComponentShape,
-        border = BorderStroke(2.dp, color.copy(alpha = 0.3f))
-    ) {
-        Row(
-            modifier = Modifier.padding(20.dp).fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .background(color.copy(alpha = 0.15f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(24.dp))
-            }
-
-            Spacer(modifier = Modifier.width(20.dp))
-
-            Column {
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFF64748B),
-                    fontWeight = FontWeight.Bold
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = value,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Black,
-                        color = Color(0xFF1E293B)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = "• $subValue",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = color,
-                        fontWeight = FontWeight.ExtraBold
-                    )
+                Spacer(Modifier.height(16.dp))
+                androidx.compose.material3.Surface(shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp), color = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.25f)) {
+                    Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Klaviatura", style = MaterialTheme.typography.labelLarge, color = Signal.OnDark, fontWeight = FontWeight.Bold)
+                        Text(
+                            if (mode.hasTest) "1 · 2 · 3 · 4 — javob · ← → — savollar yoki slaydlar · Enter — keyingisi · Esc — chiqish"
+                            else "← → — slaydlar · Enter — yakunlash · Esc — chiqish",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Signal.OnDarkMuted
+                        )
+                    }
                 }
+
+                Spacer(Modifier.height(24.dp))
+                SignalButton(
+                    text = if (isExam) "Imtihonni boshlash" else if (mode.hasSlides) "Boshlash" else "Testni boshlash",
+                    onClick = onStart,
+                    modifier = Modifier.fillMaxWidth(),
+                    style = ButtonStyle.Gradient,
+                    height = 52.dp
+                )
             }
         }
     }

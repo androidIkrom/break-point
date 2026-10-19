@@ -1,60 +1,56 @@
 package com.example.poststudy.presentation.ui.screens.admin
 
-import com.example.poststudy.presentation.ui.components.AdaptiveGrid
-import androidx.compose.animation.*
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.automirrored.filled.MenuBook
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.automirrored.outlined.MenuBook
+import androidx.compose.material.icons.filled.DeleteForever
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.Assignment
+import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Key
+import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.*
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.*
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import androidx.compose.ui.text.style.TextOverflow
-import com.example.poststudy.presentation.ui.components.BackButton
+import androidx.compose.ui.unit.dp
+import com.example.poststudy.data.session.AppServer
 import com.example.poststudy.di.AppContainer
 import com.example.poststudy.domain.model.AssignmentKind
-import com.example.poststudy.domain.model.Group
+import com.example.poststudy.domain.model.ExamRecord
 import com.example.poststudy.domain.model.GroupOverview
+import com.example.poststudy.presentation.theme.AppDesign
+import com.example.poststudy.presentation.theme.Signal
+import com.example.poststudy.presentation.theme.Space
+import com.example.poststudy.presentation.ui.components.*
 import com.example.poststudy.presentation.ui.screens.groups.GroupAssignmentDialog
 import com.example.poststudy.presentation.ui.screens.groups.GroupPasswordDialog
-import com.example.poststudy.presentation.ui.components.PasswordReveal
-import com.example.poststudy.domain.model.LessonMode
-import com.example.poststudy.presentation.theme.AppDesign
-import com.example.poststudy.presentation.ui.components.NetworkServerCard
-import com.example.poststudy.presentation.ui.components.PostStudyDialog
-import com.example.poststudy.presentation.ui.components.ThreeStepVerificationDialog
-import com.example.poststudy.data.session.AppServer
-import androidx.compose.material.icons.automirrored.filled.Logout
-import com.example.poststudy.presentation.ui.components.hoverEffect
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.time.LocalDate
+import java.util.Date
+import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TeacherHomeScreen(
     subjectId: Int,
@@ -73,6 +69,7 @@ fun TeacherHomeScreen(
     val scope = rememberCoroutineScope()
     var showLogoutDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var accountMenu by remember { mutableStateOf(false) }
 
     if (showLogoutDialog) {
         ThreeStepVerificationDialog(
@@ -80,7 +77,7 @@ fun TeacherHomeScreen(
             warning = "Chiqqaningizdan keyin admin rejimi qulflanadi va qayta kirish uchun maxfiy kalit kerak bo'ladi. Tarmoq serveri to'xtatiladi. Fanlar, darslar va sozlamalar saqlanib qoladi.",
             confirmWord = "CHIQISH",
             finalButtonText = "Chiqish",
-            color = AppDesign.Amber,
+            color = Signal.Warning,
             onDismiss = { showLogoutDialog = false },
             onConfirmed = {
                 showLogoutDialog = false
@@ -101,7 +98,7 @@ fun TeacherHomeScreen(
             warning = "Admin hisobi va BARCHA ma'lumotlar o'chiriladi: fanlar, darslar, imtihonlar, guruhlar, tinglovchilar va natijalar. Bu amalni qaytarib bo'lmaydi!",
             confirmWord = "O'CHIRISH",
             finalButtonText = "Butunlay o'chirish",
-            color = Color(0xFFDC2626),
+            color = Signal.Danger,
             onDismiss = { showDeleteDialog = false },
             onConfirmed = {
                 showDeleteDialog = false
@@ -117,16 +114,26 @@ fun TeacherHomeScreen(
     }
 
     var groups by remember { mutableStateOf<List<GroupOverview>?>(null) }
+    var records by remember { mutableStateOf<List<ExamRecord>>(emptyList()) }
+    var studentCount by remember { mutableStateOf(0) }
     var groupToEdit by remember { mutableStateOf<GroupOverview?>(null) }
     var passwordGroup by remember { mutableStateOf<GroupOverview?>(null) }
 
     fun reloadGroups() {
         scope.launch {
-            groups = withContext(Dispatchers.IO) { AppContainer.localRepository.getGroupOverviews(subjectId) }
+            val repo = AppContainer.localRepository
+            val loaded = withContext(Dispatchers.IO) { repo.getGroupOverviews(subjectId) }
+            groups = loaded
+            studentCount = withContext(Dispatchers.IO) {
+                loaded.sumOf { repo.getStudentsByGroup(it.id).first().size }
+            }
         }
     }
 
-    LaunchedEffect(subjectId) { reloadGroups() }
+    LaunchedEffect(subjectId) {
+        reloadGroups()
+        AppContainer.localRepository.getAllExamRecords(subjectId).collect { records = it.sortedByDescending { r -> r.timestamp } }
+    }
 
     passwordGroup?.let { group ->
         GroupPasswordDialog(
@@ -154,181 +161,149 @@ fun TeacherHomeScreen(
         )
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AppDesign.BackgroundGradient)
-    ) {
-        // Decorative background elements
-        Box(
-            modifier = Modifier
-                .size(600.dp)
-                .offset(x = (-150).dp, y = (-150).dp)
-                .background(Color(0xFF10B981).copy(alpha = 0.05f), CircleShape)
-        )
-        Box(
-            modifier = Modifier
-                .size(500.dp)
-                .align(Alignment.BottomEnd)
-                .offset(x = 150.dp, y = 150.dp)
-                .background(Color(0xFF3B82F6).copy(alpha = 0.05f), CircleShape)
-        )
+    val serverRunning by AppContainer.networkRepository.serverRunning.collectAsState()
+    val today = LocalDate.now()
+    val todayRecords = records.filter { Date(it.timestamp).toInstant().atZone(java.time.ZoneId.systemDefault()).toLocalDate() == today }
+    val avg = records.filter { it.totalQuestions > 0 }.map { it.correctAnswers * 100 / it.totalQuestions }.average().takeIf { !it.isNaN() }?.toInt()
+    val unlockedGroups = groups.orEmpty().count { !it.isLocked }
 
-        Scaffold(
-            containerColor = Color.Transparent,
-            topBar = {
-                TopAppBar(
-                    title = { Text(subjectName, color = Color(0xFF065F46), fontWeight = FontWeight.Black) },
-                    navigationIcon = {
-                        BackButton(onClick = onBack)
-                    },
-                    actions = {
-                        // Leave room for the help icon drawn over the top-right corner
-                        Row(Modifier.padding(end = 72.dp), verticalAlignment = Alignment.CenterVertically) {
-                            OutlinedButton(
-                                onClick = { showLogoutDialog = true },
-                                shape = AppDesign.ComponentShape,
-                                border = BorderStroke(2.dp, AppDesign.Amber)
-                            ) {
-                                Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, tint = AppDesign.Amber)
-                                Spacer(Modifier.width(8.dp))
-                                Text("Chiqish", color = AppDesign.Amber, fontWeight = FontWeight.Bold)
-                            }
-                            Spacer(Modifier.width(8.dp))
-                            TextButton(onClick = { showDeleteDialog = true }) {
-                                Icon(Icons.Default.DeleteForever, contentDescription = null, tint = Color(0xFFDC2626))
-                                Spacer(Modifier.width(4.dp))
-                                Text("Hisobni o'chirish", color = Color(0xFFDC2626), fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-                )
-            }
-        ) { paddingValues ->
-            val scrollState = rememberScrollState()
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues)
-                    .verticalScroll(scrollState)
-                    .padding(horizontal = 32.dp, vertical = 48.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(48.dp)
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "Xush kelibsiz, ${adminName?.takeIf { it.isNotBlank() } ?: "admin"}",
-                            style = MaterialTheme.typography.displaySmall,
-                            color = Color(0xFF1E293B),
-                            fontWeight = FontWeight.Black
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        IconButton(
-                            onClick = onEditAdminName,
-                            modifier = Modifier.background(AppDesign.Emerald.copy(alpha = 0.1f), CircleShape)
-                        ) {
-                            Icon(Icons.Default.Edit, contentDescription = "Ismni o'zgartirish", tint = AppDesign.Emerald)
+    Column(Modifier.fillMaxSize().background(Signal.Surface).verticalScroll(rememberScrollState())) {
+        // Dark hero with the live signal backdrop
+        Box(Modifier.fillMaxWidth()) {
+            SignalBackground(Modifier.matchParentSize(), alpha = 0.8f)
+            Column(Modifier.fillMaxWidth().padding(horizontal = Space.page, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    SignalButton(subjectName, onClick = onBack, style = ButtonStyle.Glass, trailingIcon = Icons.Default.KeyboardArrowDown, height = 36.dp, contentPadding = PaddingValues(start = 14.dp, end = 10.dp))
+                    Text("${groups?.size ?: 0} guruh · $studentCount tinglovchi", style = MaterialTheme.typography.bodySmall, color = Signal.OnDarkMuted)
+                    Spacer(Modifier.weight(1f))
+                    if (serverRunning) GlassPill("Tarmoq yoqilgan", live = true)
+                    Box {
+                        SignalButton(adminName?.takeIf { it.isNotBlank() } ?: "admin", onClick = { accountMenu = true }, style = ButtonStyle.Glass, trailingIcon = Icons.Default.KeyboardArrowDown, height = 36.dp, contentPadding = PaddingValues(start = 12.dp, end = 10.dp))
+                        DropdownMenu(expanded = accountMenu, onDismissRequest = { accountMenu = false }, shape = AppDesign.ComponentShape) {
+                            DropdownMenuItem(text = { Text("Username'ni o'zgartirish") }, leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) }, onClick = { accountMenu = false; onEditAdminName() })
+                            DropdownMenuItem(text = { Text("Chiqish") }, leadingIcon = { Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, tint = Signal.Warning) }, onClick = { accountMenu = false; showLogoutDialog = true })
+                            HorizontalDivider()
+                            DropdownMenuItem(text = { Text("Hisobni o'chirish", color = Signal.Danger) }, leadingIcon = { Icon(Icons.Default.DeleteForever, contentDescription = null, tint = Signal.Danger) }, onClick = { accountMenu = false; showDeleteDialog = true })
                         }
                     }
-
-                    NetworkServerCard(modifier = Modifier.padding(top = 20.dp).widthIn(max = 900.dp).fillMaxWidth())
-
-                    Text(
-                        text = "Bugun o'quv jarayonini qanday boshqaramiz?",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = Color(0xFF64748B),
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
                 }
 
-                AdaptiveGrid(
-                    items = listOf(
-                        HomeItem("Darslar", "Materiallarni boshqarish", Icons.AutoMirrored.Filled.MenuBook, AppDesign.Amber, onNavigateToLessons),
-                        HomeItem("Imtihon", "Test sinovlarini o'tkazish", Icons.Default.Assignment, AppDesign.Indigo, onNavigateToExam),
-                        HomeItem("Guruhlar", "Tinglovchilar va guruhlar", Icons.Default.Groups, AppDesign.Violet, onNavigateToGroups),
-                        HomeItem("Monitoring", "Natijalar statistikasi", Icons.Default.Analytics, AppDesign.Sky, onNavigateToMonitoring),
-                        HomeItem("Tahlil", "Natijalarni ko'rish", Icons.AutoMirrored.Filled.List, AppDesign.Emerald, onNavigateToHistory)
-                    ),
-                    minItemWidth = 200.dp,
-                    modifier = Modifier.fillMaxWidth().widthIn(max = 1200.dp).padding(top = 16.dp)
-                ) { item, itemModifier ->
-                    HomeCard(itemModifier, item.title, item.subtitle, item.icon, item.color, item.onClick)
+                Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Eyebrow(uzbekDate(today), color = Signal.Amber)
+                        Text("Xush kelibsiz, ${adminName?.takeIf { it.isNotBlank() } ?: "admin"}", style = MaterialTheme.typography.headlineLarge, color = Signal.OnDark)
+                        Text(
+                            buildString {
+                                append("Bugun ${todayRecords.size} ta urinish")
+                                avg?.let { append(", o'rtacha $it%") }
+                                if (unlockedGroups > 0) append(". $unlockedGroups ta guruhga parol qo'yilmagan.") else append(".")
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Signal.OnDarkMuted
+                        )
+                    }
+                    Row(Modifier.widthIn(max = 480.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        KpiTile("Bugungi urinishlar", "${todayRecords.size}", Modifier.weight(1f), onDark = true)
+                        KpiTile("O'rtacha natija", avg?.let { "$it%" } ?: "—", Modifier.weight(1f), onDark = true, valueColor = Signal.Cyan)
+                        KpiTile("Tinglovchilar", "$studentCount", Modifier.weight(1f), onDark = true)
+                    }
                 }
+            }
+        }
 
-                Spacer(modifier = Modifier.height(32.dp))
+        // Network control sits right under the hero, on the light workspace
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+            NetworkServerCard(
+                modifier = Modifier.widthIn(max = Space.contentMaxWidth + Space.page * 2).fillMaxWidth().padding(start = Space.page, end = Space.page, top = Space.xl)
+            )
+        }
 
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+            Row(
+                Modifier.widthIn(max = Space.contentMaxWidth + Space.page * 2).fillMaxWidth().padding(start = Space.page, end = Space.page, top = 18.dp, bottom = Space.xl),
+                horizontalArrangement = Arrangement.spacedBy(18.dp)
+            ) {
                 GroupAssignmentsTable(
                     groups = groups,
                     onEdit = { groupToEdit = it },
                     onEditPassword = { passwordGroup = it },
                     onManageGroups = onNavigateToGroups,
-                    modifier = Modifier.fillMaxWidth().widthIn(max = 1200.dp)
+                    modifier = Modifier.weight(2f)
                 )
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                    SignalCard(padding = 16.dp) {
+                        Text("Bo'limlar", style = MaterialTheme.typography.titleMedium, color = Signal.Ink)
+                        Spacer(Modifier.height(6.dp))
+                        QuickAction("Darslar", "Materiallarni boshqarish", Icons.AutoMirrored.Outlined.MenuBook, Signal.GradientPrimary, onNavigateToLessons)
+                        QuickAction("Imtihon", "Test sinovlarini o'tkazish", Icons.Outlined.Assignment, Signal.GradientCyanAmber, onNavigateToExam)
+                        QuickAction("Guruhlar", "Tinglovchilar va guruhlar", Icons.Outlined.Groups, Signal.GradientAmberPrimary, onNavigateToGroups)
+                        QuickAction("Monitoring", "Natijalar statistikasi", Icons.Outlined.BarChart, Signal.GradientPrimary, onNavigateToMonitoring)
+                        QuickAction("Tahlil", "Natijalarni ko'rish", Icons.Outlined.History, Signal.GradientCyanAmber, onNavigateToHistory)
+                    }
+                    RecentResultsCard(records, onNavigateToMonitoring)
+                }
             }
         }
     }
 }
 
-private class HomeItem(
-    val title: String,
-    val subtitle: String,
-    val icon: ImageVector,
-    val color: Color,
-    val onClick: () -> Unit
-)
+private fun uzbekDate(date: LocalDate): String {
+    val days = listOf("Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba", "Yakshanba")
+    val months = listOf("yanvar", "fevral", "mart", "aprel", "may", "iyun", "iyul", "avgust", "sentyabr", "oktyabr", "noyabr", "dekabr")
+    return "${days[date.dayOfWeek.value - 1]}, ${date.dayOfMonth} ${months[date.monthValue - 1]}"
+}
 
 @Composable
-fun HomeCard(
-    modifier: Modifier,
-    title: String,
-    subtitle: String,
-    icon: ImageVector,
-    color: Color,
-    onClick: () -> Unit
-) {
-    Surface(
-        modifier = modifier
-            .heightIn(min = 170.dp)
-            .hoverEffect()
-            .clickable { onClick() },
-        shape = AppDesign.ComponentShape,
-        color = Color.White,
-        border = BorderStroke(4.dp, color.copy(alpha = 0.8f)),
-        shadowElevation = 8.dp
+private fun QuickAction(title: String, subtitle: String, icon: ImageVector, brush: Brush, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    val shift by androidx.compose.animation.core.animateDpAsState(if (hovered) 4.dp else 0.dp, label = "shift")
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(AppDesign.ComponentShape)
+            .background(if (hovered) Signal.Container else Color.Transparent)
+            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 8.dp)
+            .offset(x = shift),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .background(color.copy(alpha = 0.15f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(32.dp))
-            }
+        GradientTile(brush, size = 36.dp) { Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp)) }
+        Column {
+            Text(title, style = MaterialTheme.typography.titleSmall, color = Signal.Ink)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Signal.Muted)
+        }
+    }
+}
 
-            Column {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Black,
-                    color = color,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF64748B),
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
+@Composable
+private fun RecentResultsCard(records: List<ExamRecord>, onOpenMonitoring: () -> Unit) {
+    val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+    SignalCard(padding = 16.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("So'nggi natijalar", style = MaterialTheme.typography.titleMedium, color = Signal.Ink, modifier = Modifier.weight(1f))
+            SignalButton("Monitoring", onClick = onOpenMonitoring, style = ButtonStyle.Text, height = 32.dp, contentPadding = PaddingValues(horizontal = 8.dp))
+        }
+        val recent = records.take(12).reversed().filter { it.totalQuestions > 0 }.map { it.correctAnswers * 100f / it.totalQuestions }
+        if (recent.size >= 2) {
+            Spacer(Modifier.height(8.dp))
+            Sparkline(recent, Modifier.fillMaxWidth().height(44.dp))
+        }
+        Spacer(Modifier.height(8.dp))
+        if (records.isEmpty()) {
+            Text("Hali natijalar yo'q. Tinglovchilar test topshirganda shu yerda ko'rinadi.", style = MaterialTheme.typography.bodySmall, color = Signal.Muted)
+        } else {
+            records.take(4).forEach { r ->
+                val pct = if (r.totalQuestions > 0) r.correctAnswers * 100 / r.totalQuestions else 0
+                Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    InitialsAvatar(r.studentName, size = 28.dp)
+                    Column(Modifier.weight(1f)) {
+                        Text(r.studentName, style = MaterialTheme.typography.titleSmall, color = Signal.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("${r.lessonTitle} · ${timeFormat.format(Date(r.timestamp))}", style = MaterialTheme.typography.bodySmall, color = Signal.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    Text("$pct%", style = MaterialTheme.typography.labelLarge, color = when { pct >= 80 -> Signal.Success; pct >= 60 -> Signal.Warning; else -> Signal.Danger })
+                }
             }
         }
     }
@@ -343,145 +318,113 @@ private fun GroupAssignmentsTable(
     onManageGroups: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val headerColor = Color(0xFF065F46)
-    val muted = Color(0xFF64748B)
-    Surface(
-        modifier = modifier,
-        shape = AppDesign.CardShape,
-        color = Color.White,
-        border = BorderStroke(3.dp, AppDesign.Emerald.copy(alpha = 0.3f)),
-        shadowElevation = 12.dp
-    ) {
-        Column(Modifier.padding(32.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        "Guruhlar va mashg'ulotlar",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Black,
-                        color = headerColor
-                    )
-                    Text(
-                        "Har bir guruh tinglovchilari kirganda o'z mashg'ulotini oladi",
-                        color = muted
-                    )
-                }
-                OutlinedButton(onClick = onManageGroups, shape = AppDesign.ComponentShape) {
-                    Icon(Icons.Default.Groups, contentDescription = null, tint = AppDesign.Violet)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Guruhlarni boshqarish", color = AppDesign.Violet, fontWeight = FontWeight.Bold)
-                }
+    SignalCard(modifier = modifier, padding = 0.dp) {
+        Row(Modifier.padding(start = 22.dp, end = 16.dp, top = 18.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Guruhlar va mashg'ulotlar", style = MaterialTheme.typography.headlineSmall, color = Signal.Ink)
+                Text("Har bir guruh tinglovchilari kirganda o'z mashg'ulotini oladi. Qatorni bosib o'zgartiring.", style = MaterialTheme.typography.bodySmall, color = Signal.Muted)
             }
-            Spacer(Modifier.height(20.dp))
+            SignalButton("Guruhlarni boshqarish", onClick = onManageGroups, style = ButtonStyle.Text, height = 36.dp, contentPadding = PaddingValues(horizontal = 10.dp))
+        }
 
-            // Header row
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFFF1F5F9))
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                TableHeader("Guruh", Modifier.weight(1.2f))
-                TableHeader("Mashg'ulot", Modifier.weight(2f))
-                TableHeader("Turi", Modifier.weight(0.9f))
-                TableHeader("Rejim", Modifier.weight(1.3f))
-                TableHeader("Parol", Modifier.weight(1.2f))
-                Spacer(Modifier.width(96.dp))
+        Row(
+            Modifier.fillMaxWidth().background(Signal.SurfaceContainer).padding(horizontal = 22.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            TableHeader("Guruh", Modifier.weight(1.1f))
+            TableHeader("Mashg'ulot", Modifier.weight(2f))
+            TableHeader("Turi", Modifier.weight(1f))
+            TableHeader("Parol", Modifier.weight(1.3f))
+            Spacer(Modifier.width(88.dp))
+        }
+
+        when {
+            groups == null -> Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Signal.Primary, trackColor = Signal.Container)
             }
-
-            when {
-                groups == null -> Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = AppDesign.Emerald)
-                }
-                groups.isEmpty() -> Text(
-                    "Bu fanda guruhlar yo'q. 'Guruhlarni boshqarish' orqali guruh qo'shing.",
-                    color = muted,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(vertical = 24.dp, horizontal = 16.dp)
-                )
-                else -> groups.forEachIndexed { index, g ->
-                    if (index > 0) HorizontalDivider(color = Color(0xFFF1F5F9))
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { onEdit(g) }
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            g.name,
-                            modifier = Modifier.weight(1.2f),
-                            fontWeight = FontWeight.Black,
-                            color = Color(0xFF1E293B),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+            groups.isEmpty() -> Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("Bu fanda guruhlar yo'q", style = MaterialTheme.typography.titleMedium, color = Signal.Ink)
+                Text("'Guruhlarni boshqarish' orqali guruh qo'shing.", style = MaterialTheme.typography.bodySmall, color = Signal.Muted)
+                Spacer(Modifier.height(12.dp))
+                SignalButton("Guruh qo'shish", onClick = onManageGroups, height = 40.dp)
+            }
+            else -> groups.forEachIndexed { index, g ->
+                if (index > 0) HorizontalDivider(color = Signal.SurfaceContainer)
+                val rowInteraction = remember { MutableInteractionSource() }
+                val rowHovered by rowInteraction.collectIsHoveredAsState()
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(if (!g.isLocked) Signal.WarningContainer.copy(alpha = 0.5f) else if (rowHovered) Signal.Surface else Color.Transparent)
+                        .clickable(interactionSource = rowInteraction, indication = null) { onEdit(g) }
+                        .padding(horizontal = 22.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(g.name, modifier = Modifier.weight(1.1f), style = MaterialTheme.typography.titleSmall, color = Signal.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Column(Modifier.weight(2f)) {
                         Text(
                             text = when {
                                 g.isAssigned -> g.assignmentTitle.orEmpty()
                                 g.assignmentMissing -> "O'chirilgan mashg'ulot"
                                 else -> "Biriktirilmagan"
                             },
-                            modifier = Modifier.weight(2f),
-                            fontWeight = if (g.isAssigned) FontWeight.Bold else FontWeight.Normal,
-                            color = when {
-                                g.isAssigned -> Color(0xFF1E293B)
-                                g.assignmentMissing -> Color(0xFFEF4444)
-                                else -> Color(0xFF94A3B8)
-                            },
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            style = MaterialTheme.typography.titleSmall,
+                            color = when { g.isAssigned -> Signal.Ink; g.assignmentMissing -> Signal.Danger; else -> Signal.Muted },
+                            maxLines = 1, overflow = TextOverflow.Ellipsis
                         )
-                        Box(Modifier.weight(0.9f)) {
-                            if (g.isAssigned) {
-                                val kindColor = if (g.kind == AssignmentKind.Exam) AppDesign.Indigo else AppDesign.Amber
-                                TableChip(g.kind!!.label, kindColor)
-                            }
+                        if (g.isAssigned) {
+                            Text(if (g.kind == AssignmentKind.Exam) "Test" else g.mode?.label.orEmpty(), style = MaterialTheme.typography.bodySmall, color = Signal.Muted)
                         }
-                        Box(Modifier.weight(1.3f)) {
-                            if (g.isAssigned) {
-                                TableChip(if (g.kind == AssignmentKind.Exam) "Test" else g.mode?.label.orEmpty(), AppDesign.Emerald)
-                            }
+                    }
+                    Box(Modifier.weight(1f)) {
+                        if (g.isAssigned) {
+                            if (g.kind == AssignmentKind.Exam) StatusChip("Imtihon", Signal.WarningContainer, Signal.OnWarningContainer)
+                            else StatusChip("Dars", Signal.Container, Signal.OnContainer)
                         }
-                        PasswordReveal(g.password, modifier = Modifier.weight(1.2f))
-                        IconButton(
-                            onClick = { onEditPassword(g) },
-                            modifier = Modifier.size(40.dp).background(AppDesign.Violet.copy(alpha = 0.1f), CircleShape)
-                        ) {
-                            Icon(Icons.Default.Key, contentDescription = "Parolni o'zgartirish", tint = AppDesign.Violet)
+                    }
+                    Box(Modifier.weight(1.3f)) {
+                        if (g.isLocked) PasswordReveal(g.password)
+                        else Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Icon(Icons.Outlined.LockOpen, contentDescription = null, tint = Signal.Warning, modifier = Modifier.size(14.dp))
+                            Text("Parol yo'q", style = MaterialTheme.typography.labelLarge, color = Signal.Warning)
                         }
-                        Spacer(Modifier.width(16.dp))
-                        IconButton(
-                            onClick = { onEdit(g) },
-                            modifier = Modifier.size(40.dp).background(AppDesign.Emerald.copy(alpha = 0.1f), CircleShape)
-                        ) {
-                            Icon(Icons.Default.Edit, contentDescription = "O'zgartirish", tint = AppDesign.Emerald)
-                        }
+                    }
+                    Row(Modifier.width(88.dp), horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End)) {
+                        SignalIconButton(Icons.Outlined.Key, "Parolni o'zgartirish", { onEditPassword(g) }, tint = if (g.isLocked) Signal.Muted else Signal.Warning, size = 34.dp)
+                        SignalIconButton(Icons.Default.Edit, "O'zgartirish", { onEdit(g) }, tint = Signal.Primary, container = Signal.Container, borderColor = null, size = 34.dp)
                     }
                 }
             }
         }
+        Spacer(Modifier.height(8.dp))
     }
 }
 
 @Composable
 private fun TableHeader(text: String, modifier: Modifier) {
-    Text(text, modifier = modifier, fontWeight = FontWeight.Black, color = Color(0xFF475569), style = MaterialTheme.typography.labelLarge)
+    Text(text.uppercase(), modifier = modifier, style = MaterialTheme.typography.labelSmall, color = Signal.Muted)
 }
 
+/** Thin line chart with a soft fill, used for recent results. */
 @Composable
-private fun TableChip(text: String, color: Color) {
-    Surface(color = color.copy(alpha = 0.12f), shape = CircleShape) {
-        Text(
-            text,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-            color = color,
-            fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.labelLarge,
-            maxLines = 1
-        )
+fun Sparkline(values: List<Float>, modifier: Modifier = Modifier, color: Color = Signal.Primary) {
+    androidx.compose.foundation.Canvas(modifier) {
+        if (values.size < 2) return@Canvas
+        val min = 0f
+        val max = 100f
+        val stepX = size.width / (values.size - 1)
+        val points = values.mapIndexed { i, v -> androidx.compose.ui.geometry.Offset(i * stepX, size.height - (v - min) / (max - min) * size.height) }
+        val line = androidx.compose.ui.graphics.Path().apply {
+            moveTo(points.first().x, points.first().y)
+            points.drop(1).forEach { lineTo(it.x, it.y) }
+        }
+        val fill = androidx.compose.ui.graphics.Path().apply {
+            addPath(line)
+            lineTo(points.last().x, size.height)
+            lineTo(points.first().x, size.height)
+            close()
+        }
+        drawPath(fill, Brush.verticalGradient(listOf(Signal.Cyan.copy(alpha = 0.35f), Color.Transparent)))
+        drawPath(line, color, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.5.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
     }
 }

@@ -26,13 +26,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.poststudy.di.AppContainer
 import com.example.poststudy.presentation.theme.AppDesign
+import com.example.poststudy.presentation.theme.Signal
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private val Danger = Color(0xFFEF4444)
+private val Danger = Signal.Danger
 
 /**
  * True while Ctrl+Alt+1+2 are held together. Feed every key event of the screen to [onEvent].
@@ -253,17 +254,17 @@ private fun StepIndicator(step: Int, color: Color) {
             Surface(
                 shape = CircleShape,
                 color = if (done) color else Color.White,
-                border = BorderStroke(2.dp, if (done) color else Color(0xFFCBD5E1)),
+                border = BorderStroke(2.dp, if (done) color else Signal.OutlineStrong),
                 modifier = Modifier.size(32.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Text("$i", color = if (done) Color.White else Color(0xFF94A3B8), fontWeight = FontWeight.Black)
+                    Text("$i", color = if (done) Color.White else Signal.Faint, fontWeight = FontWeight.Black)
                 }
             }
             if (i < 3) {
-                Box(Modifier.width(32.dp).height(2.dp).background(if (i < step) color else Color(0xFFCBD5E1)))
+                Box(Modifier.width(32.dp).height(2.dp).background(if (i < step) color else Signal.OutlineStrong))
             }
         }
     }
-    Text("$step / 3-qadam", color = Color(0xFF64748B), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 6.dp))
+    Text("$step / 3-qadam", color = Signal.Muted, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 6.dp))
 }

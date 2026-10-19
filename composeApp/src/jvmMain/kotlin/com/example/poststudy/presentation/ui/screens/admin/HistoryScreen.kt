@@ -1,48 +1,58 @@
 package com.example.poststudy.presentation.ui.screens.admin
 
-import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.outlined.DeleteSweep
+import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.Event
+import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.*
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.example.poststudy.presentation.ui.components.BackButton
+import com.example.poststudy.data.util.ResultsCsv
 import com.example.poststudy.di.AppContainer
+import io.github.vinceglb.filekit.compose.rememberFileSaverLauncher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.example.poststudy.domain.model.ExamRecord
 import com.example.poststudy.domain.model.Group
 import com.example.poststudy.domain.model.Student
 import com.example.poststudy.presentation.theme.AppDesign
-import com.example.poststudy.presentation.ui.components.hoverEffect
-import com.example.poststudy.presentation.ui.components.HelpIcon
-import com.example.poststudy.presentation.ui.components.PostStudyDialog
+import com.example.poststudy.presentation.theme.Signal
+import com.example.poststudy.presentation.theme.Space
+import com.example.poststudy.presentation.ui.components.*
+import com.example.poststudy.presentation.ui.screens.groups.EmptyBox
 import java.text.SimpleDateFormat
 import java.util.*
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistoryScreen(subjectId: Int, onBack: () -> Unit) {
     var selectedTab by remember { mutableStateOf(HistoryTab.GROUPS) }
-    
+
     // Navigation states
     var selectedGroup by remember { mutableStateOf<Group?>(null) }
     var selectedStudent by remember { mutableStateOf<Student?>(null) }
@@ -51,9 +61,28 @@ fun HistoryScreen(subjectId: Int, onBack: () -> Unit) {
     var showClearAllDialog by remember { mutableStateOf(false) }
     var recordToDelete by remember { mutableStateOf<ExamRecord?>(null) }
 
+    // Every result of this subject as a spreadsheet the teacher can keep or hand over
+    val scope = rememberCoroutineScope()
+    val saver = rememberFileSaverLauncher { }
+    var exporting by remember { mutableStateOf(false) }
+    val exportCsv: () -> Unit = {
+        if (!exporting) {
+            exporting = true
+            scope.launch {
+                val bytes = withContext(Dispatchers.IO) {
+                    val repo = AppContainer.localRepository
+                    val groups = repo.getAllGroups(subjectId).first().associate { it.id to it.name }
+                    ResultsCsv.build(repo.getAllExamRecords(subjectId).first(), groups)
+                }
+                saver.launch(bytes, "breakpoint-natijalar-${java.time.LocalDate.now()}", "csv")
+                exporting = false
+            }
+        }
+    }
+
     // Keyboard back handling
     val focusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    LaunchedEffect(Unit) { runCatching { focusRequester.requestFocus() } }
 
     val handleBack = {
         when {
@@ -70,7 +99,7 @@ fun HistoryScreen(subjectId: Int, onBack: () -> Unit) {
             title = "Barcha tarixlarni tozalash",
             text = "Haqiqatan ham barcha imtihon yozuvlarini o'chirib tashlamoqchimisiz? Bu amalni qaytarib bo'lmaydi.",
             confirmText = "Hammasini tozalash",
-            confirmColor = Color(0xFFEF4444),
+            confirmColor = Signal.Danger,
             onConfirm = {
                 AppContainer.localRepository.clearAllExamRecords(subjectId)
                 showClearAllDialog = false
@@ -84,128 +113,72 @@ fun HistoryScreen(subjectId: Int, onBack: () -> Unit) {
             title = "Yozuvni o'chirish",
             text = "Haqiqatan ham '${recordToDelete?.studentName}' tinglovchisining ushbu imtihon yozuvini o'chirib tashlamoqchimisiz?",
             confirmText = "O'chirish",
-            confirmColor = Color(0xFFEF4444),
+            confirmColor = Signal.Danger,
             onConfirm = {
-                recordToDelete?.let {
-                    AppContainer.localRepository.deleteExamRecord(it.id)
-                }
+                recordToDelete?.let { AppContainer.localRepository.deleteExamRecord(it.id) }
                 recordToDelete = null
             }
         )
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AppDesign.BackgroundGradient)
-            .focusRequester(focusRequester)
-            .focusable()
-            .onPreviewKeyEvent {
-                if (it.type == KeyEventType.KeyDown) {
-                    when (it.key) {
-                        Key.Escape, Key.Backspace -> {
-                            handleBack()
-                            true
-                        }
-                        else -> false
-                    }
-                } else false
-            }
-    ) {
-        Scaffold(
-            containerColor = Color.Transparent,
-            topBar = {
-                TopAppBar(
-                    title = {
-                        Column {
-                            Text("Imtihon tahlili", fontWeight = FontWeight.Black, color = Color(0xFF065F46))
-                            if (selectedGroup != null || selectedDate != null) {
-                                val subtitle = when {
-                                    selectedStudent != null -> "${selectedGroup?.name} > ${selectedStudent?.name}"
-                                    selectedGroup != null -> selectedGroup?.name ?: ""
-                                    selectedDate != null -> selectedDate ?: ""
-                                    else -> ""
-                                }
-                                if (subtitle.isNotEmpty()) {
-                                    Text(
-                                        text = subtitle,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = Color(0xFF065F46).copy(alpha = 0.7f)
-                                    )
-                                }
-                            }
-                        }
-                    },
-                    navigationIcon = {
-                        BackButton(onClick = handleBack)
-                    },
-                    actions = {
-                        HelpIcon(
-                            title = "Imtihon tarixi",
-                            helpText = "Bu yerda barcha topshirilgan testlar natijalarini ko'rishingiz mumkin. Guruhlar bo'yicha yoki so'nggi natijalar bo'yicha saralashingiz mumkin.",
-                            modifier = Modifier.padding(end = 8.dp)
-                        )
-                        IconButton(onClick = { showClearAllDialog = true }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Hammasini tozalash", tint = Color(0xFFEF4444))
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-                )
-            }
-        ) { paddingValues ->
-            Column(modifier = Modifier.padding(paddingValues).fillMaxSize()) {
-                // Tab Switcher
-                Row(
-                    modifier = Modifier
-                        .padding(horizontal = 24.dp, vertical = 8.dp)
-                        .height(56.dp)
-                        .clip(AppDesign.ComponentShape)
-                        .background(Color.White.copy(alpha = 0.5f))
-                        .padding(4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    HistoryTabItem(
-                        modifier = Modifier.weight(1f),
-                        text = "Guruhlar",
-                        isSelected = selectedTab == HistoryTab.GROUPS,
-                        onClick = { 
-                            selectedTab = HistoryTab.GROUPS
-                            selectedDate = null
-                        }
-                    )
-                    HistoryTabItem(
-                        modifier = Modifier.weight(1f),
-                        text = "So'ngilar",
-                        isSelected = selectedTab == HistoryTab.RECENT,
-                        onClick = { 
-                            selectedTab = HistoryTab.RECENT
-                            selectedGroup = null
-                            selectedStudent = null
-                        }
-                    )
-                }
+    val crumbs = buildList {
+        add(if (selectedTab == HistoryTab.GROUPS) "Guruhlar" else "So'ngilar")
+        selectedGroup?.let { add(it.name) }
+        selectedStudent?.let { add(it.name) }
+        selectedDate?.let { add(it) }
+    }
 
-                Box(modifier = Modifier.weight(1f)) {
-                    when (selectedTab) {
-                        HistoryTab.GROUPS -> {
-                            GroupsView(
-                                subjectId = subjectId,
-                                selectedGroup = selectedGroup,
-                                selectedStudent = selectedStudent,
-                                onGroupClick = { selectedGroup = it },
-                                onStudentClick = { selectedStudent = it },
-                                onDeleteRecord = { recordToDelete = it }
-                            )
+    AdminPage(
+        title = "Imtihon tahlili",
+        eyebrow = "Tarix",
+        subtitle = crumbs.joinToString(" › "),
+        onBack = if (crumbs.size > 1) handleBack else null,
+        actions = {
+            HelpIcon(
+                title = "Imtihon tarixi",
+                helpText = "Bu yerda barcha topshirilgan testlar natijalarini ko'rishingiz mumkin. Guruhlar bo'yicha yoki so'nggi natijalar bo'yicha saralashingiz mumkin."
+            )
+            SignalButton("CSV eksport", onClick = exportCsv, enabled = !exporting, icon = Icons.Outlined.FileDownload, style = ButtonStyle.Outlined, height = 42.dp)
+            SignalIconButton(Icons.Outlined.DeleteSweep, "Hammasini tozalash", { showClearAllDialog = true }, tint = Signal.Danger, size = 42.dp, iconSize = 20.dp)
+        }
+    ) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .focusRequester(focusRequester)
+                .focusable()
+                .onPreviewKeyEvent {
+                    if (it.type == KeyEventType.KeyDown) {
+                        when (it.key) {
+                            Key.Escape, Key.Backspace -> { handleBack(); true }
+                            else -> false
                         }
-                        HistoryTab.RECENT -> {
-                            RecentView(
-                                subjectId = subjectId,
-                                selectedDate = selectedDate,
-                                onDateClick = { selectedDate = it },
-                                onDeleteRecord = { recordToDelete = it }
-                            )
-                        }
-                    }
+                    } else false
+                }
+        ) {
+            Row(Modifier.padding(horizontal = Space.page, vertical = Space.m), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                SignalChip("Guruhlar bo'yicha", selectedTab == HistoryTab.GROUPS, { selectedTab = HistoryTab.GROUPS; selectedDate = null }, icon = Icons.Outlined.Groups)
+                SignalChip("So'nggi natijalar", selectedTab == HistoryTab.RECENT, { selectedTab = HistoryTab.RECENT; selectedGroup = null; selectedStudent = null }, icon = Icons.Outlined.History)
+                Spacer(Modifier.weight(1f))
+                Text("Esc — bir qadam orqaga", style = MaterialTheme.typography.bodySmall, color = Signal.Muted)
+            }
+
+            Box(modifier = Modifier.weight(1f)) {
+                when (selectedTab) {
+                    HistoryTab.GROUPS -> GroupsView(
+                        subjectId = subjectId,
+                        selectedGroup = selectedGroup,
+                        selectedStudent = selectedStudent,
+                        onGroupClick = { selectedGroup = it },
+                        onStudentClick = { selectedStudent = it },
+                        onDeleteRecord = { recordToDelete = it }
+                    )
+                    HistoryTab.RECENT -> RecentView(
+                        subjectId = subjectId,
+                        selectedDate = selectedDate,
+                        onDateClick = { selectedDate = it },
+                        onDeleteRecord = { recordToDelete = it }
+                    )
                 }
             }
         }
@@ -213,23 +186,6 @@ fun HistoryScreen(subjectId: Int, onBack: () -> Unit) {
 }
 
 enum class HistoryTab { GROUPS, RECENT }
-
-@Composable
-fun HistoryTabItem(modifier: Modifier, text: String, isSelected: Boolean, onClick: () -> Unit) {
-    val backgroundColor by animateColorAsState(if (isSelected) Color(0xFF10B981) else Color.Transparent)
-    val textColor by animateColorAsState(if (isSelected) Color.White else Color(0xFF64748B))
-    
-    Surface(
-        onClick = onClick,
-        modifier = modifier.fillMaxHeight().hoverEffect(scale = 1.02f, yOffset = -4f),
-        shape = RoundedCornerShape(16.dp),
-        color = backgroundColor
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Text(text, fontWeight = FontWeight.Black, color = textColor)
-        }
-    }
-}
 
 @Composable
 fun GroupsView(
@@ -253,14 +209,16 @@ fun GroupsView(
             LaunchedEffect(selectedGroup) {
                 AppContainer.localRepository.getStudentsByGroup(selectedGroup.id).collect { groupStudents = it }
             }
-            StudentsList(groupStudents, onStudentClick)
+            if (groupStudents.isEmpty()) EmptyBox(Icons.Outlined.Person, "Ushbu guruhda tinglovchilar mavjud emas", "Tinglovchilar tarmoq orqali kirganda qo'shiladi.")
+            else SelectionGrid(groupStudents.map { SelectionItem(it.name, "Natijalarni ko'rish", Icons.Outlined.Person) { onStudentClick(it) } })
         }
         else -> {
             var allGroups by remember { mutableStateOf<List<Group>>(emptyList()) }
             LaunchedEffect(subjectId) {
                 AppContainer.localRepository.getAllGroups(subjectId).collect { allGroups = it }
             }
-            GroupsList(allGroups, onGroupClick)
+            if (allGroups.isEmpty()) EmptyBox(Icons.Outlined.Groups, "Guruhlar mavjud emas", "'Guruhlar' bo'limida guruh qo'shing.")
+            else SelectionGrid(allGroups.map { SelectionItem(it.name, "Tinglovchilarni ko'rish", Icons.Outlined.Groups) { onGroupClick(it) } })
         }
     }
 }
@@ -277,64 +235,41 @@ fun RecentView(
         AppContainer.localRepository.getAllExamRecords(subjectId).collect { allRecords = it }
     }
 
+    val sdf = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()) }
     if (selectedDate != null) {
-        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         val records = allRecords.filter { sdf.format(Date(it.timestamp)) == selectedDate }
         RecordsList(records, onDeleteRecord)
     } else {
-        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         val dates = allRecords.map { sdf.format(Date(it.timestamp)) }.distinct()
-        DatesList(dates, onDateClick)
+        if (dates.isEmpty()) EmptyBox(Icons.Outlined.Event, "Natijalar mavjud emas", "Tinglovchilar test topshirganda sanalar shu yerda ko'rinadi.")
+        else SelectionGrid(dates.map { date -> SelectionItem(date, "${allRecords.count { sdf.format(Date(it.timestamp)) == date }} ta natija", Icons.Outlined.Event) { onDateClick(date) } })
     }
 }
 
-@Composable
-fun GroupsList(groups: List<Group>, onGroupClick: (Group) -> Unit) {
-    if (groups.isEmpty()) {
-        EmptyState("Guruhlar mavjud emas")
-    } else {
-        LazyColumn(
-            contentPadding = PaddingValues(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-                itemsIndexed(groups) { index, group ->
-                    val color = AppDesign.RainbowPalette[index % AppDesign.RainbowPalette.size]
-                    SelectionCard(group.name, "Tinglovchilarni ko'rish", Icons.Default.Groups, color) { onGroupClick(group) }
-                }
-        }
-    }
-}
+private class SelectionItem(val title: String, val subtitle: String, val icon: ImageVector, val onClick: () -> Unit)
 
 @Composable
-fun StudentsList(students: List<Student>, onStudentClick: (Student) -> Unit) {
-    if (students.isEmpty()) {
-        EmptyState("Ushbu guruhda tinglovchilar mavjud emas")
-    } else {
-        LazyColumn(
-            contentPadding = PaddingValues(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-                itemsIndexed(students) { index, student ->
-                    val color = AppDesign.RainbowPalette[index % AppDesign.RainbowPalette.size]
-                    SelectionCard(student.name, "Natijalarni ko'rish", Icons.Default.Person, color) { onStudentClick(student) }
+private fun SelectionGrid(items: List<SelectionItem>) {
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(280.dp),
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = Space.page, vertical = Space.m),
+        horizontalArrangement = Arrangement.spacedBy(Space.m),
+        verticalArrangement = Arrangement.spacedBy(Space.m)
+    ) {
+        itemsIndexed(items) { index, item ->
+            SignalCard(onClick = item.onClick, padding = 14.dp) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    GradientTile(listOf(Signal.GradientPrimary, Signal.GradientCyanAmber, Signal.GradientAmberPrimary)[index % 3], size = 40.dp) {
+                        Icon(item.icon, contentDescription = null, tint = androidx.compose.ui.graphics.Color.White, modifier = Modifier.size(20.dp))
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text(item.title, style = MaterialTheme.typography.titleSmall, color = Signal.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(item.subtitle, style = MaterialTheme.typography.bodySmall, color = Signal.Muted)
+                    }
+                    Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Signal.Faint)
                 }
-        }
-    }
-}
-
-@Composable
-fun DatesList(dates: List<String>, onDateClick: (String) -> Unit) {
-    if (dates.isEmpty()) {
-        EmptyState("Natijalar mavjud emas")
-    } else {
-        LazyColumn(
-            contentPadding = PaddingValues(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-                itemsIndexed(dates) { index, date ->
-                    val color = AppDesign.RainbowPalette[index % AppDesign.RainbowPalette.size]
-                    SelectionCard(date, "Shu kundagi natijalar", Icons.Default.Event, color) { onDateClick(date) }
-                }
+            }
         }
     }
 }
@@ -342,172 +277,62 @@ fun DatesList(dates: List<String>, onDateClick: (String) -> Unit) {
 @Composable
 fun RecordsList(records: List<ExamRecord>, onDeleteRecord: (ExamRecord) -> Unit) {
     if (records.isEmpty()) {
-        EmptyState("Natijalar topilmadi")
+        EmptyBox(Icons.Outlined.History, "Natijalar topilmadi", "Bu yerda hali yozuv yo'q.")
     } else {
         LazyColumn(
-            contentPadding = PaddingValues(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = Space.page, vertical = Space.m),
+            verticalArrangement = Arrangement.spacedBy(Space.m)
         ) {
-                items(records) { record ->
-                    HistoryItem(record = record, onDelete = { onDeleteRecord(record) })
-                }
+            items(records, key = { it.id }) { record ->
+                HistoryItem(record = record, onDelete = { onDeleteRecord(record) })
+            }
         }
     }
 }
-
-@Composable
-fun SelectionCard(title: String, subtitle: String, icon: ImageVector, color: Color, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier.fillMaxWidth().hoverEffect(scale = 1.02f),
-        shape = AppDesign.CardShape,
-        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.95f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        border = BorderStroke(4.dp, color.copy(alpha = 0.5f)),
-        onClick = onClick
-    ) {
-        Row(
-            modifier = Modifier.padding(24.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(20.dp)
-        ) {
-            Surface(
-                color = color.copy(alpha = 0.1f),
-                shape = CircleShape,
-                modifier = Modifier.size(56.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(28.dp))
-                }
-            }
-            Column {
-                Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = color)
-                Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
-            }
-            Spacer(Modifier.weight(1f))
-            Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, tint = color.copy(alpha = 0.3f))
-        }
-    }
-}
-
-@Composable
-fun EmptyState(text: String) {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(text, style = MaterialTheme.typography.bodyLarge, color = Color(0xFF64748B))
-    }
-}
-
 
 @Composable
 fun HistoryItem(record: ExamRecord, onDelete: () -> Unit) {
-    val date = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault()).format(Date(record.timestamp))
+    val date = remember(record.timestamp) { SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault()).format(Date(record.timestamp)) }
     val percentage = if (record.totalQuestions > 0) (record.correctAnswers.toFloat() / record.totalQuestions * 100).toInt() else 0
-    val scoreColor = when {
-        percentage >= 80 -> Color(0xFF4ADE80)
-        percentage >= 60 -> Color(0xFFFACC15)
-        else -> Color(0xFFEF4444)
+    val (chipBg, chipFg) = when {
+        percentage >= 80 -> Signal.SuccessContainer to Signal.OnSuccessContainer
+        percentage >= 60 -> Signal.WarningContainer to Signal.OnWarningContainer
+        else -> Signal.DangerContainer to Signal.OnDangerContainer
     }
+    var expanded by remember { mutableStateOf(false) }
 
-    Card(
-        modifier = Modifier.fillMaxWidth().hoverEffect(scale = 1.02f),
-        shape = AppDesign.CardShape,
-        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.95f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        border = BorderStroke(2.dp, scoreColor.copy(alpha = 0.3f))
-    ) {
-        Column(modifier = Modifier.padding(24.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = record.studentName,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Black,
-                        color = Color(0xFF1E293B)
-                    )
-                    Text(
-                        text = record.lessonTitle,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFF4F46E5),
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                }
-                
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        color = scoreColor.copy(alpha = 0.1f),
-                        shape = CircleShape,
-                        border = BorderStroke(2.dp, scoreColor.copy(alpha = 0.5f))
-                    ) {
-                        Text(
-                            text = "$percentage%",
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Black,
-                            color = scoreColor
-                        )
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    IconButton(
-                        onClick = onDelete,
-                        modifier = Modifier.background(Color(0xFFEF4444).copy(alpha = 0.1f), CircleShape)
-                    ) {
-                        Icon(Icons.Default.Delete, contentDescription = "O'chirish", tint = Color(0xFFEF4444))
-                    }
-                }
+    SignalCard(padding = 18.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            InitialsAvatar(record.studentName, size = 44.dp)
+            Column(Modifier.weight(1f)) {
+                Text(record.studentName, style = MaterialTheme.typography.titleMedium, color = Signal.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(record.lessonTitle, style = MaterialTheme.typography.bodySmall, color = Signal.Primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 20.dp), thickness = 1.dp, color = Color(0xFFF1F5F9))
-
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                InfoColumn("Ball", "${record.correctAnswers} / ${record.totalQuestions}")
-                
-                val m = record.timeSpentSeconds / 60
-                val s = record.timeSpentSeconds % 60
-                InfoColumn("Vaqt", "%d:%02d".format(m, s))
-
-                InfoColumn("Sana", date)
-            }
-
-            if (record.wrongDetails.isNotEmpty()) {
-                var expanded by remember { mutableStateOf(false) }
-                Spacer(modifier = Modifier.height(20.dp))
-                
-                OutlinedButton(
-                    onClick = { expanded = !expanded },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = AppDesign.ComponentShape,
-                    border = BorderStroke(1.dp, Color(0xFFE2E8F0))
-                ) {
-                    Text(if (expanded) "Tafsilotlarni yopish" else "Xatolarni ko'rish", fontWeight = FontWeight.Bold, color = Color(0xFF64748B))
-                }
-                
-                if (expanded) {
-                    Spacer(modifier = Modifier.height(16.dp))
+            StatusChip("$percentage%", chipBg, chipFg)
+            SignalIconButton(Icons.Default.Delete, "O'chirish", onDelete, tint = Signal.Danger, size = 34.dp)
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+            InfoColumn("Ball", "${record.correctAnswers} / ${record.totalQuestions}")
+            InfoColumn("Vaqt", "%d:%02d".format(record.timeSpentSeconds / 60, record.timeSpentSeconds % 60))
+            InfoColumn("Sana", date)
+        }
+        if (record.wrongDetails.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            SignalButton(if (expanded) "Tafsilotlarni yopish" else "Xatolarni ko'rish", onClick = { expanded = !expanded }, style = ButtonStyle.Tonal, height = 36.dp)
+            AnimatedVisibility(expanded) {
+                Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     record.wrongDetails.split("\n\n").forEach { errorBlock ->
-                        Surface(
-                            color = Color(0xFFF8FAFC),
-                            shape = AppDesign.ComponentShape,
-                            border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                val lines = errorBlock.split("\n")
-                                lines.forEachIndexed { index, line ->
+                        Surface(color = Signal.Surface, shape = AppDesign.ComponentShape, border = BorderStroke(1.dp, Signal.Outline), modifier = Modifier.fillMaxWidth()) {
+                            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                errorBlock.split("\n").forEachIndexed { index, line ->
                                     val color = when {
-                                        line.startsWith("To'g'ri") -> Color(0xFF059669)
-                                        line.startsWith("Tanlangan") -> Color(0xFFE11D48)
-                                        else -> Color(0xFF1E293B)
+                                        line.startsWith("To'g'ri") -> Signal.Success
+                                        line.startsWith("Tanlangan") -> Signal.Danger
+                                        else -> Signal.Ink
                                     }
-                                    val weight = if (index == 0) FontWeight.ExtraBold else FontWeight.Bold
-                                    Text(
-                                        text = line,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = color,
-                                        fontWeight = weight
-                                    )
+                                    Text(line, style = if (index == 0) MaterialTheme.typography.titleSmall else MaterialTheme.typography.bodyMedium, color = color)
                                 }
                             }
                         }
@@ -521,7 +346,7 @@ fun HistoryItem(record: ExamRecord, onDelete: () -> Unit) {
 @Composable
 fun InfoColumn(label: String, value: String) {
     Column {
-        Text(text = label, style = MaterialTheme.typography.labelSmall, color = Color(0xFF64748B), fontWeight = FontWeight.Bold)
-        Text(text = value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Black, color = Color(0xFF1E293B))
+        Text(label, style = MaterialTheme.typography.bodySmall, color = Signal.Muted)
+        Text(value, style = MaterialTheme.typography.titleSmall, color = Signal.Ink)
     }
 }
